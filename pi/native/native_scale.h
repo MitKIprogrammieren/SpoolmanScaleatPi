@@ -81,7 +81,19 @@ inline void coords(const lv_obj_t* o, lv_area_t* a) {
 }
 }  // namespace pinat
 
+// The close (X) and back (<) buttons in the FilamentLager look: dark box with
+// a frame in the accent colour, like the card's close button, instead of the
+// red one. Restyled once the screen code has finished with them.
+void piHeaderButtonRestyle(lv_obj_t* label, const char* text);
+namespace pinat {
+inline void labelText(lv_obj_t* l, const char* t) {
+  lv_label_set_text(l, t);
+  piHeaderButtonRestyle(l, t);
+}
+}  // namespace pinat
+
 // ---- setters: logical -> display pixels ----------------------------------------
+#define lv_label_set_text(l, t)         pinat::labelText((l), (t))
 #define lv_obj_set_size(o, w, h)        pinat::setSize((o), (w), (h))
 #define lv_obj_set_pos(o, x, y)         lv_obj_set_pos((o), pinat::X(x), pinat::Y(y))
 #define lv_obj_set_x(o, x)              lv_obj_set_x((o), pinat::X(x))

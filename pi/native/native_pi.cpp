@@ -123,3 +123,32 @@ void piNativeAudit() {
   fprintf(stderr, "Audit: run\n");
   auditObj(lv_scr_act(), 0);
 }
+
+
+// ---- header buttons -------------------------------------------------------------
+#include "ui/theme.h"
+
+static void restyle(void* p) {
+  lv_obj_t* label = (lv_obj_t*)p;
+  if (!lv_obj_is_valid(label)) return;
+  lv_obj_t* btn = lv_obj_get_parent(label);
+  if (!btn || !lv_obj_check_type(btn, &lv_btn_class) || lv_obj_get_child_cnt(btn) != 1) return;
+  // Only the square 44 px header buttons, not a wide "Close" button with text.
+  const lv_coord_t w = lv_obj_get_style_width(btn, LV_PART_MAIN);
+  const lv_coord_t h = lv_obj_get_style_height(btn, LV_PART_MAIN);
+  if (w != h || w > (lv_coord_t)(60 * g_pi_s)) return;
+  lv_obj_set_style_bg_color(btn, lv_color_hex(UI_COL_SURFACE), 0);
+  lv_obj_set_style_bg_color(btn, lv_color_hex(UI_COL_PRESS_FILL), LV_STATE_PRESSED);
+  lv_obj_set_style_border_width(btn, (lv_coord_t)(2 * g_pi_s + 0.5f), 0);
+  lv_obj_set_style_border_color(btn, lv_color_hex(UI_COL_POPUP_BORDER), 0);
+  lv_obj_set_style_text_color(label, lv_color_hex(UI_COL_INK), 0);
+}
+
+void piHeaderButtonRestyle(lv_obj_t* label, const char* text) {
+  if (!label || !text) return;
+  const bool close = strcmp(text, LV_SYMBOL_CLOSE) == 0;
+  const bool back = strcmp(text, LV_SYMBOL_LEFT) == 0;
+  if (!close && !back) return;
+  // The screen code sets colours after the text; this runs after it.
+  lv_async_call(restyle, label);
+}
