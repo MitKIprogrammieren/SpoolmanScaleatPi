@@ -53,6 +53,7 @@ int main() {
   while (!s_stop) {
     appLoop();
     s_loop_passes++;
+    { extern void piNativeAudit(); piNativeAudit(); }
     // The ESP loop task yields once per pass as well; this keeps an idle
     // scale near 0 % CPU without slowing LVGL (it refreshes every 16 ms).
     delay(2);

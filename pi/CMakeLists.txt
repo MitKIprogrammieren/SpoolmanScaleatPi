@@ -72,6 +72,7 @@ file(GLOB PI_SOURCES CONFIGURE_DEPENDS
   ${PI_DIR}/compat/*.cpp
   ${PI_DIR}/hal/*.cpp
   ${PI_DIR}/override/*.cpp
+  ${PI_DIR}/native/*.cpp
   ${PI_DIR}/main_pi.cpp)
 
 # ---- LVGL ---------------------------------------------------------------------
@@ -98,6 +99,15 @@ target_compile_definitions(spoolmanscale PRIVATE
 target_compile_options(spoolmanscale PRIVATE
   -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function
   $<$<COMPILE_LANGUAGE:CXX>:-Wno-deprecated-declarations>)
+# Native 800x480 mode: every firmware C++ file sees LVGL through the scaling
+# wrappers of native/native_scale.h (factors stay 1 unless SPOOLMANSCALE_NATIVE
+# is set). label_render draws printer labels in exact pixels and stays out.
+set(FW_NATIVE_SOURCES ${FW_SOURCES})
+list(FILTER FW_NATIVE_SOURCES INCLUDE REGEX "\\.cpp$")
+list(REMOVE_ITEM FW_NATIVE_SOURCES ${FW_SRC}/services/label_render.cpp)
+set_source_files_properties(${FW_NATIVE_SOURCES} PROPERTIES
+  COMPILE_OPTIONS "-include;${PI_DIR}/native/native_scale.h")
+
 target_link_libraries(spoolmanscale PRIVATE lvgl PkgConfig::CURL Threads::Threads)
 
 install(TARGETS spoolmanscale RUNTIME DESTINATION bin)

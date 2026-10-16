@@ -1,6 +1,14 @@
 # Settings for the SpoolmanScale service. Remove the # in front of a line to
 # use it, then: sudo systemctl restart spoolmanscale
 
+# Test: native 800x480 - the UI fills the whole screen and is drawn sharp
+# at full resolution instead of being scaled up from 480x320.
+#SPOOLMANSCALE_NATIVE=1
+
+# Colours: the dark theme looks like the FilamentLager card in Home
+# Assistant. "original" brings back the blue dark theme.
+#SPOOLMANSCALE_THEME=original
+
 # Picture upside down (and touch with it).
 #SPOOLMANSCALE_ROTATE=180
 

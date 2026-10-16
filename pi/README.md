@@ -123,6 +123,8 @@ In `/etc/default/spoolmanscale` (danach `sudo systemctl restart spoolmanscale`):
 
 | Variable | Wirkung |
 |---|---|
+| `SPOOLMANSCALE_NATIVE=1` | Test: Vollbild 800×480, scharf gezeichnet (siehe unten) |
+| `SPOOLMANSCALE_THEME=original` | ursprüngliches blaues Farbschema statt FilamentLager-Look |
 | `SPOOLMANSCALE_ROTATE=180` | Bild und Touch um 180° drehen |
 | `SPOOLMANSCALE_SCALE=nearest` | scharfe statt weiche Skalierung |
 | `SPOOLMANSCALE_TOUCH_SWAP_XY=1` | Touch-Achsen tauschen |
@@ -141,6 +143,23 @@ Die Oberfläche ist für 480×320 gebaut. Auf dem TFT50 wird sie um den Faktor
 1,5 auf **720×480** vergrößert und mittig gezeigt, links und rechts bleibt je
 ein schwarzer Rand von 40 Pixeln. Die Touch-Koordinaten werden zurückgerechnet.
 Die Skalierung ist weich (bilinear), mit `SPOOLMANSCALE_SCALE=nearest` scharf.
+
+### Vollbild, nativ 800×480 (Test)
+
+Mit `SPOOLMANSCALE_NATIVE=1` zeichnet LVGL direkt in voller Auflösung über
+den ganzen Bildschirm, ohne Ränder und ohne Hochskalieren, also gestochen
+scharf. Die Bildschirme der Firmware sind weiter für 480×320 geschrieben;
+`pi/native/native_scale.h` rechnet beim Übersetzen jede Position, Größe,
+Ecke, Linie und Schrift um (Breite ×1,67, Höhe ×1,5, Schriften eine passende
+größere Montserrat-Größe). Der Modus ist neu, einzelne Bildschirme können
+noch kleine Unschönheiten haben. Ohne die Variable läuft alles wie bisher.
+
+### Farben
+
+Das dunkle Farbschema ist auf dem Pi an die FilamentLager-Karte in Home
+Assistant angelehnt: fast schwarzer Hintergrund, dunkelgraue Karten mit
+grünem Rahmen, grüne Schaltflächen, Orange/Rot/Grün für den Status. Die
+hellen und die Spoolman/FilaMan-Schemata bleiben unverändert.
 
 Helligkeit und Abschalten im Ruhezustand laufen über
 `/sys/class/backlight`, falls das Display dort einen Regler anbietet,
@@ -170,7 +189,9 @@ pi/
                       WebServer, Preferences als Dateien, Wire über i2c-dev,
                       FreeRTOS über pthreads, Flash-Partitionen als Dateien)
   hal/               Display + Touch, NAU7802, PN532
-  override/          Pi-Fassungen der wenigen ESP-only-Dateien aus src/
+  override/          Pi-Fassungen der wenigen ESP-only-Dateien aus src/,
+                     FilamentLager-Farben (pi_theme.cpp)
+  native/            Vollbild-Modus: Umrechnung 480x320 -> 800x480
   systemd/           Dienst und Einstellungsdatei
   install.sh         Pakete, Build, Installation
 ```

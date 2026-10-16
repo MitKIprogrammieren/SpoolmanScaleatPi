@@ -41,9 +41,16 @@
 #include "app_config.h"
 #include "ui/touch_feedback.h"
 
+extern bool g_pi_native;
+extern float g_pi_s;
+void piNativeSetPanel(int w, int h);
+
 namespace {
-constexpr int UI_W = 480;
-constexpr int UI_H = 320;
+// The size LVGL draws at: 480x320 (scaled up to the panel) or, in native
+// mode (SPOOLMANSCALE_NATIVE=1), the panel's own size.
+int UI_W = 480;
+int UI_H = 320;
+bool s_native = false;
 
 void (*s_touch_activity)() = nullptr;
 
@@ -61,7 +68,7 @@ float s_scale = 1.0f;
 int s_out_x = 0, s_out_y = 0, s_out_w = UI_W, s_out_h = UI_H;
 
 // The UI as LVGL drew it, so scaling can read neighbours across flush areas.
-std::vector<uint16_t> s_shadow(UI_W * UI_H, 0);
+std::vector<uint16_t> s_shadow;
 
 // Precomputed source coordinates (16.16 fixed point) for each output column/row.
 std::vector<int32_t> s_src_x, s_src_y;
@@ -250,6 +257,11 @@ void consoleToGraphics() {
 }
 
 void computeLayout() {
+  if (s_native) {
+    UI_W = s_fb_w;
+    UI_H = s_fb_h;
+  }
+  s_shadow.assign((size_t)UI_W * UI_H, 0);
   s_scale = std::min((float)s_fb_w / UI_W, (float)s_fb_h / UI_H);
   if (s_scale <= 0) s_scale = 1.0f;
   s_out_w = (int)floorf(UI_W * s_scale + 0.001f);
@@ -271,8 +283,9 @@ void computeLayout() {
     if (sy > UI_H - 1) sy = UI_H - 1;
     s_src_y[i] = (int32_t)(sy * 65536.0f);
   }
-  fprintf(stderr, "Display: UI 480x320 shown at %dx%d (x%.2f), offset %d,%d\n", s_out_w, s_out_h, s_scale,
-          s_out_x, s_out_y);
+  if (s_scale == 1.0f) s_nearest = true;   // 1:1, nothing to blend
+  fprintf(stderr, "Display: UI %dx%d shown at %dx%d (x%.2f), offset %d,%d%s\n", UI_W, UI_H, s_out_w, s_out_h,
+          s_scale, s_out_x, s_out_y, s_native ? ", native" : "");
 }
 
 void findBacklight() {
@@ -559,13 +572,16 @@ bool displayHardwareBegin(void (*touch_activity_cb)()) {
   s_inv_x = envOn("SPOOLMANSCALE_TOUCH_INVERT_X");
   s_inv_y = envOn("SPOOLMANSCALE_TOUCH_INVERT_Y");
   s_tdebug = envOn("SPOOLMANSCALE_TOUCH_DEBUG");
+  s_native = g_pi_native;
 
   const bool have_fb = openFramebuffer();
   if (have_fb && s_fb_fd >= 0) {
     consoleToGraphics();
     blank(false);
   }
+  if (!have_fb) s_native = g_pi_native = false;
   computeLayout();
+  if (s_native) piNativeSetPanel(UI_W, UI_H);
   clearPanel();
   findBacklight();
   writeBacklight(BRIGHT_NORMAL_DEFAULT);
@@ -582,6 +598,8 @@ bool displayHardwareBegin(void (*touch_activity_cb)()) {
   disp_drv.hor_res = UI_W;
   disp_drv.ver_res = UI_H;
   disp_drv.flush_cb = lvglFlush;
+  // LVGL's own widgets (keyboard, lists) size their paddings by the dpi.
+  if (s_native) disp_drv.dpi = (lv_coord_t)(LV_DPI_DEF * g_pi_s);
   disp_drv.draw_buf = &draw_buf;
   lv_disp_drv_register(&disp_drv);
 
@@ -610,5 +628,5 @@ void displayBacklightOff() { displaySetBrightness(0); }
 void displayBacklightOn(uint8_t brightness) { displaySetBrightness(brightness ? brightness : BRIGHT_NORMAL_DEFAULT); }
 void displayPrepareDeepSleep() { displaySetBrightness(0); }
 
-// For the Pi's own tools: the current picture as the UI drew it (480x320 RGB565).
+// For the Pi's own tools: the current picture as the UI drew it (UI_W x UI_H RGB565).
 const uint16_t* displayPiShadow() { return s_shadow.data(); }

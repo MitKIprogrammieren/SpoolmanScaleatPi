@@ -97,12 +97,21 @@ uint32_t uiShade(uint32_t colour, int step) {
   return out;
 }
 
+#ifdef SPOOLMANSCALE_PI
+void piThemeOverlay(int id);
+#endif
+
 static void applyPalette(UiThemeId id) {
   for (size_t i = 0; i < PALETTE_SIZE; i++) *PALETTE_VARS[i] = PALETTES[id][i];
   const int dir = THEMES[id].dark ? 1 : -1;
   UI_SHADE_PRESSED = dir * SHADE_PRESSED_STEP;
   UI_SHADE_BORDER  = dir * SHADE_BORDER_STEP;
   s_active = id;
+#ifdef SPOOLMANSCALE_PI
+  // Raspberry Pi: the dark theme takes the look of the FilamentLager card
+  // in Home Assistant (pi/override/pi_theme.cpp).
+  piThemeOverlay((int)id);
+#endif
 }
 
 void uiThemeBegin() {
