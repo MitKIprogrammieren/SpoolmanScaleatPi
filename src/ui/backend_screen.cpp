@@ -20,6 +20,9 @@
 #include "app/backend_switch.h"
 #include "ui_common.h"
 #include "theme.h"
+#ifdef SPOOLMANSCALE_PI
+#include "lager_screen.h"
+#endif
 
 // Switching the mode has to happen outside this screen's own event callback,
 // otherwise the callback would delete the button it is currently running on.
@@ -334,6 +337,38 @@ void buildBackendScreen() {
   // Centred rather than at x=16 like the other two: those sit beside a browser
   // button, and Spoolman has no credentials to enter, so there is no pair here
   // to line up with.
+#ifdef SPOOLMANSCALE_PI
+  // Home Assistant runs on the Spoolman path, but Spoolman's own options
+  // (extra fields, OpenSpoolman, tag fields) mean nothing to the user there.
+  // The bridge is set up on the Pi; this screen says so and offers the stock.
+  if (backendIsHomeAssistant()) {
+    lv_obj_t *hint = lv_label_create(scr_backend);
+    lv_label_set_text(hint, "Home Assistant wird auf dem Pi eingerichtet:\n"
+                            "sudo filamentlager-ha-bridge --setup");
+    lv_obj_set_style_text_color(hint, lv_color_hex(UI_COL_CAPTION), 0);
+    lv_obj_set_style_text_font(hint, &lv_font_montserrat_ext_12, 0);
+    lv_obj_set_style_text_align(hint, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(hint, LV_ALIGN_TOP_MID, 0, 196);
+
+    lv_obj_t *btn = lv_btn_create(scr_backend);
+    lv_obj_set_size(btn, 216, 44);
+    lv_obj_set_pos(btn, 132, 240);
+    lv_obj_set_style_bg_color(btn, lv_color_hex(UI_COL_OK_BG), 0);
+    lv_obj_set_style_bg_color(btn, lv_color_hex(UI_COL_OK_BG_PRESSED), LV_STATE_PRESSED);
+    lv_obj_set_style_radius(btn, 8, 0);
+    lv_obj_set_style_shadow_width(btn, 0, 0);
+    lv_obj_set_style_border_width(btn, 0, 0);
+    lv_obj_add_event_cb(btn, [](lv_event_t *e) {
+      logSD("BTN: Backend -> Lager");
+      showLagerScreen();
+    }, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *l = lv_label_create(btn);
+    lv_label_set_text(l, LV_SYMBOL_LIST "  Lager  " LV_SYMBOL_RIGHT);
+    lv_obj_set_style_text_color(l, lv_color_hex(UI_COL_OK_TEXT), 0);
+    lv_obj_set_style_text_font(l, &lv_font_montserrat_ext_16, 0);
+    lv_obj_center(l);
+  } else
+#endif
   if (backendMode() == BACKEND_SPOOLMAN) {
     lv_obj_t *btn_opts = lv_btn_create(scr_backend);
     lv_obj_set_size(btn_opts, 216, 44);
