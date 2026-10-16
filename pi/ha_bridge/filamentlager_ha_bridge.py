@@ -189,12 +189,12 @@ class HomeAssistant:
     def cfg(self):
         return load_config()
 
-    def call(self, service, data, response=False, timeout=10):
+    def call(self, service, data, response=False, timeout=10, entity=None, domain="todo"):
         c = self.cfg()
         if not c["url"] or not c["token"]:
             raise HAError("not configured: run filamentlager-ha-bridge --setup")
-        url = "%s/api/services/todo/%s%s" % (c["url"], service, "?return_response" if response else "")
-        body = json.dumps(dict(data, entity_id=c["entity"])).encode()
+        url = "%s/api/services/%s/%s%s" % (c["url"], domain, service, "?return_response" if response else "")
+        body = json.dumps(dict(data, entity_id=entity or c["entity"])).encode()
         req = urllib.request.Request(url, data=body, method="POST", headers={
             "Authorization": "Bearer " + c["token"], "Content-Type": "application/json"})
         try:
@@ -263,6 +263,62 @@ class HomeAssistant:
         except Exception as e:      # the stock list works without it
             log("AMS read failed:", e)
             return None
+
+    # ---- the card's settings: an item in its consumption list ------------------
+
+    DESIGN_DEFAULT = {"farbe": "#4caf50", "rand": 2, "kompakt": False, "aus": [], "zweisprachig": True}
+
+    def log_entity(self):
+        return self.cfg().get("verbrauch") or "todo.filament_verbrauch"
+
+    def design(self):
+        """The card's settings (colour of the frames, frame width, compact
+        list, ...) - stored by the card as an item of typ "einstellungen" in
+        its consumption list, so they are the same on every device - plus the
+        silica threshold."""
+        out = dict(self.DESIGN_DEFAULT)
+        uid = None
+        try:
+            r = self.call("get_items", {}, response=True, entity=self.log_entity())
+            resp = r.get("service_response", r)
+            for it in (resp.get(self.log_entity()) or {}).get("items", []):
+                try:
+                    d = json.loads(it.get("description") or "{}")
+                except ValueError:
+                    continue
+                if isinstance(d, dict) and d.get("typ") == "einstellungen":
+                    out.update(d.get("werte") or {})
+                    uid = it["uid"]
+                    break
+        except HAError as e:
+            log("design: list not readable:", e)
+        out["silica"] = None
+        try:
+            c = self.cfg()
+            req = urllib.request.Request(c["url"] + "/api/states/input_number.silica_warnschwelle",
+                                         headers={"Authorization": "Bearer " + c["token"]})
+            with urllib.request.urlopen(req, timeout=10) as r:
+                out["silica"] = int(round(float(json.loads(r.read().decode())["state"])))
+        except Exception:
+            pass
+        return out, uid
+
+    def set_design(self, changes):
+        cur, uid = self.design()
+        silica = changes.pop("silica", None)
+        werte = {k: v for k, v in cur.items() if k != "silica"}
+        werte.update({k: v for k, v in changes.items() if k in ("farbe", "rand", "kompakt", "zweisprachig", "aus")})
+        desc = json.dumps({"typ": "einstellungen", "v": 1, "werte": werte}, ensure_ascii=False, separators=(",", ":"))
+        if changes:
+            if uid:
+                self.call("update_item", {"item": uid, "description": desc}, entity=self.log_entity())
+            else:
+                self.call("add_item", {"item": "Einstellungen (Ernsthaft gelagert)", "description": desc},
+                          entity=self.log_entity())
+        if silica is not None:
+            self.call("set_value", {"value": int(silica)}, entity="input_number.silica_warnschwelle",
+                      domain="input_number")
+        return self.design()[0]
 
     def update(self, uid, d):
         self.call("update_item", {"item": uid, "description": json.dumps(d, ensure_ascii=False,
@@ -738,6 +794,10 @@ class Handler(BaseHTTPRequestHandler):
                                    "git_commit": "filamentlager-ha-bridge", "build_date": ""})
         if p == "/api/v1/lager":
             return self.send(200, B.lager())
+        if p == "/api/v1/design":
+            if method in ("PUT", "PATCH", "POST"):
+                return self.send(200, B.ha.set_design(self.body()))
+            return self.send(200, B.ha.design()[0])
         if p == "/api/v1/tag/reader":
             return self.send(200, [])
         if p == "/api/v1/tag/scan" and method == "POST":

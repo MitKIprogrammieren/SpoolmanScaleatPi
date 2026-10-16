@@ -17,6 +17,10 @@ struct PiText {
 };
 
 const PiText kTexts[] = {
+  // No firmware update and no info page on the Pi build.
+  {STR_TILE_SYSTEM_SUB,
+   {"Sprache | Weboberfläche | Neustart", "Language | Web interface | Restart",
+    "Langue | Interface web | Redémarrage"}},
   {STR_DIAG_BUS_EMPTY_BANNER,
    {"NFC-Reader und Waage fehlen", "NFC reader and scale missing", "Lecteur NFC et balance absents"}},
   {STR_DIAG_BUS_EMPTY_TITLE,

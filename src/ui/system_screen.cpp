@@ -203,8 +203,12 @@ void buildSystemScreen() {
   addRow(list, LV_SYMBOL_LIST, T(STR_LANG_TITLE), T(STR_BTN_LANG_SUB),
     [](lv_event_t *e){ logSD("BTN: System -> Language"); showLanguageScreen(); });
 
+#ifndef SPOOLMANSCALE_PI
+  // Not on the FilamentLager Pi build: the page links the original project's
+  // channels and speaks only of Spoolman, FilaMan and BamBuddy.
   addRow(list, LV_SYMBOL_BELL, T(STR_BTN_INFO), T(STR_BTN_INFO_SUB),
     [](lv_event_t *e){ logSD("BTN: System -> Info"); show_info_pending = true; });
+#endif
 
   // Always present, unlike the popup that points at it. A row is pulled, not
   // pushed: whoever has just moved the wire comes here to confirm it, and
