@@ -1736,7 +1736,12 @@ void appLoop() {
     static uint8_t nfc_recover_tries = 0;
     if (!nfc_ok && millis() - last_nfc_recover_ms >= 5000) {
       last_nfc_recover_ms = millis();
+#ifdef SPOOLMANSCALE_PI
+      // On the Pi the reader is on the UART: "on the bus" means it answers.
+      if (!nfcHardwarePing()) {
+#else
       if (!i2cPresent(I2C_EXT, I2C_ADDR_PN532)) {
+#endif
         // Off the bus entirely. Nothing to re-initialise, and the counter is
         // cleared so a reader that is plugged back in gets a full set of
         // attempts rather than the remainder of an old one.

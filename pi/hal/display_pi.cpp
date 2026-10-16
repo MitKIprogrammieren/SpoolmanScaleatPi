@@ -432,6 +432,13 @@ void ensureTouch() {
 
 int s_slot = 0;   // multi-touch slot being reported; only the first finger counts
 
+// A tap can begin and end between two reads when the main loop is busy for a
+// moment (a reader poll, a request). Then the last state is "up" and LVGL
+// would never see the press. A press seen in a batch is kept here and
+// reported once, at the position it had.
+bool s_latched = false;
+int s_latch_x = 0, s_latch_y = 0;
+
 void pollTouch() {
   ensureTouch();
   if (s_touch_fd < 0) return;
@@ -455,6 +462,12 @@ void pollTouch() {
         else if (e.code == ABS_MT_POSITION_X || e.code == ABS_X) s_raw_x = e.value;
         else if (e.code == ABS_MT_POSITION_Y || e.code == ABS_Y) s_raw_y = e.value;
         else if (e.code == ABS_MT_TRACKING_ID) s_down = e.value >= 0;
+      } else if (e.type == EV_SYN && e.code == SYN_REPORT) {
+        if (s_down) {
+          s_latched = true;
+          s_latch_x = s_raw_x;
+          s_latch_y = s_raw_y;
+        }
       } else if (e.type == EV_KEY && e.code == BTN_TOUCH) {
         s_down = e.value != 0;
       }
@@ -465,7 +478,15 @@ void pollTouch() {
 void lvglTouch(lv_indev_drv_t*, lv_indev_data_t* data) {
   pollTouch();
   pollPipe();
-  if (s_down) {
+  // Released already, but pressed since the last read: report the press now
+  // (at its own position), the release on the next read.
+  const bool pressed = s_down || s_latched;
+  if (!s_down && s_latched) {
+    s_raw_x = s_latch_x;
+    s_raw_y = s_latch_y;
+  }
+  s_latched = false;
+  if (pressed) {
     // Raw -> panel pixels -> UI points.
     float nx = (float)(s_raw_x - s_tx_min) / (float)(s_tx_max - s_tx_min);
     float ny = (float)(s_raw_y - s_ty_min) / (float)(s_ty_max - s_ty_min);
