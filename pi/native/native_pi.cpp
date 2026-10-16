@@ -1,5 +1,6 @@
 // Runtime side of native_scale.h: the factors and the font map.
 // This file is compiled without the wrappers.
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <cstdio>
@@ -13,9 +14,26 @@ LV_FONT_DECLARE(lv_font_montserrat_ext_42)
 LV_FONT_DECLARE(lv_font_montserrat_ext_44)
 LV_FONT_DECLARE(lv_font_montserrat_ext_48)
 
+#include "pi_paths.h"
+
+// The switch on the Design page writes <data>/vollbild ("1" or "0"); without
+// that file SPOOLMANSCALE_NATIVE decides.
 static bool envNative() {
+  if (FILE* f = fopen(piDataPath("vollbild").c_str(), "r")) {
+    const int c = fgetc(f);
+    fclose(f);
+    if (c == '1' || c == '0') return c == '1';
+  }
   const char* e = getenv("SPOOLMANSCALE_NATIVE");
   return e && *e && strcmp(e, "0") != 0;
+}
+
+bool piNativeSaved() { return envNative(); }
+void piNativeSave(bool on) {
+  if (FILE* f = fopen(piDataPath("vollbild").c_str(), "w")) {
+    fputc(on ? '1' : '0', f);
+    fclose(f);
+  }
 }
 
 bool g_pi_native = envNative();

@@ -7,6 +7,21 @@
 #include <cstring>
 
 #include "ui/theme.h"
+#include "ui/ha_design.h"
+
+namespace {
+uint32_t mix(uint32_t a, uint32_t b, float t) {   // t = share of b
+  uint32_t out = 0;
+  for (int sh = 0; sh <= 16; sh += 8) {
+    const float x = ((a >> sh) & 0xFF) * (1 - t) + ((b >> sh) & 0xFF) * t;
+    out |= (uint32_t)(x + 0.5f) << sh;
+  }
+  return out;
+}
+int luma(uint32_t c) {
+  return (int)(0.299f * ((c >> 16) & 0xFF) + 0.587f * ((c >> 8) & 0xFF) + 0.114f * (c & 0xFF));
+}
+}  // namespace
 
 void piThemeOverlay(int id) {
   if (id != UI_THEME_DARK) return;
@@ -69,4 +84,28 @@ void piThemeOverlay(int id) {
   UI_COL_FILAMENT_BG = 0x1e2a18;
   UI_COL_LV_PRIMARY = 0x5e9e30;
   UI_COL_LV_SECONDARY = 0xff9800;
+
+  // The colour of the frames as set in the card (or on the scale's Design
+  // page): every green above that stands for "the accent" follows it.
+  const uint32_t a = haDesign().accent;
+  const bool light = luma(a) > 170;
+  UI_COL_ACCENT = light ? a : mix(a, 0xffffff, 0.12f);
+  UI_COL_STATUS_BLUE = UI_COL_ACCENT;
+  UI_COL_WEIGHT_AUTO = UI_COL_ACCENT;
+  UI_COL_ON_ACCENT = light ? 0x111111 : (luma(UI_COL_ACCENT) > 140 ? 0x111111 : 0xffffff);
+  UI_COL_LINE = mix(a, 0x111111, 0.72f);
+  UI_COL_POPUP_BORDER = a;
+  UI_COL_NFC_FRAME = a;
+  UI_COL_LV_PRIMARY = a;
+  UI_COL_OK_BG = UI_COL_GO_BG = mix(a, 0x000000, 0.18f);
+  UI_COL_OK_BG_PRESSED = UI_COL_GO_BG_PRESSED = UI_COL_MATCH_BG_PRESSED = mix(a, 0x000000, 0.4f);
+  UI_COL_OK_TEXT = luma(UI_COL_OK_BG) > 150 ? 0x111111 : 0xffffff;
+  UI_COL_OK_TEXT_2 = luma(UI_COL_OK_BG) > 150 ? 0x222222 : mix(a, 0xffffff, 0.75f);
+  UI_COL_PRESS_FILL = mix(a, 0x111111, 0.5f);
+  UI_COL_ROW_PRESSED = UI_COL_ROW_PRESS_FILL = UI_COL_CHOICE_BG_PRESSED = UI_COL_ACCENT_CHIP =
+      mix(a, 0x1c1c1c, 0.8f);
+  UI_COL_PICKED_BG = mix(a, 0x111111, 0.68f);
+  UI_COL_ALT_TEXT = UI_COL_WEIGHT_TEXT = mix(a, 0xffffff, 0.4f);
+  UI_COL_WEIGHT_BG = UI_COL_FILAMENT_BG = mix(a, 0x111111, 0.85f);
+  UI_COL_WEIGHT_BG_PRESSED = mix(a, 0x111111, 0.7f);
 }

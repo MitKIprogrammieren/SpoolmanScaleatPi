@@ -19,6 +19,7 @@
 #include "theme.h"
 #ifdef SPOOLMANSCALE_PI
 #include "lager_screen.h"
+#include "design_screen.h"
 #endif
 
 
@@ -147,7 +148,7 @@ void buildSettingsScreen() {
 #ifdef SPOOLMANSCALE_PI
   if (lager) {
     lv_obj_t *bar = lv_btn_create(scr_settings);
-    lv_obj_set_size(bar, 460, 62);
+    lv_obj_set_size(bar, 306, 62);
     lv_obj_set_pos(bar, 8, 250);
     lv_obj_set_style_bg_color(bar, lv_color_hex(UI_COL_OK_BG), 0);
     lv_obj_set_style_bg_color(bar, lv_color_hex(UI_COL_OK_BG_PRESSED), LV_STATE_PRESSED);
@@ -167,6 +168,30 @@ void buildSettingsScreen() {
     lv_obj_add_event_cb(bar, [](lv_event_t *e) {
       logSD("UI: Settings -> Lager");
       showLagerScreen();
+    }, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_t *des = lv_btn_create(scr_settings);
+    lv_obj_set_size(des, 146, 62);
+    lv_obj_set_pos(des, 322, 250);
+    lv_obj_set_style_bg_color(des, lv_color_hex(UI_COL_ROW), 0);
+    lv_obj_set_style_bg_color(des, lv_color_hex(UI_COL_ROW_PRESS_FILL), LV_STATE_PRESSED);
+    lv_obj_set_style_radius(des, 10, 0);
+    lv_obj_set_style_shadow_width(des, 0, 0);
+    lv_obj_set_style_border_width(des, 2, 0);
+    lv_obj_set_style_border_color(des, lv_color_hex(UI_COL_POPUP_BORDER), 0);
+    lv_obj_t *dl = lv_label_create(des);
+    lv_label_set_text(dl, LV_SYMBOL_EDIT "  Design");
+    lv_obj_set_style_text_color(dl, lv_color_hex(UI_COL_INK), 0);
+    lv_obj_set_style_text_font(dl, &lv_font_montserrat_ext_18, 0);
+    lv_obj_align(dl, LV_ALIGN_CENTER, 0, -8);
+    lv_obj_t *ds = lv_label_create(des);
+    lv_label_set_text(ds, "Farbe | Rahmen");
+    lv_obj_set_style_text_color(ds, lv_color_hex(UI_COL_CAPTION), 0);
+    lv_obj_set_style_text_font(ds, &lv_font_montserrat_ext_12, 0);
+    lv_obj_align(ds, LV_ALIGN_CENTER, 0, 15);
+    lv_obj_add_event_cb(des, [](lv_event_t *e) {
+      logSD("UI: Settings -> Design");
+      showDesignScreen();
     }, LV_EVENT_CLICKED, NULL);
   }
 #endif

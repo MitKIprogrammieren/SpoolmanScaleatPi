@@ -212,6 +212,14 @@ weiter in der FilamentLager-Karte an.
 Farbe, Rollen, offenen Resten und Bestand, filterbar nach PLA, PETG, ABS,
 ASA, TPU, Andere und Leer.
 
+**Design:** Daneben öffnet **Design** die Einstellungen der FilamentLager-Karte:
+Farbe der Umrandungen, Rahmenstärke, Ansicht der Liste, Farbnamen
+(Deutsch + Englisch) und die Silica-Warnschwelle. Sie liegen in Home Assistant
+und gelten überall – eine Änderung auf der Waage sieht man in der Karte und
+umgekehrt. Dazu kommt der Schalter **Vollbild / Klassisch** für die Waage.
+Farbe und Bildschirm gelten nach einem Neustart, der beim Verlassen angeboten
+wird.
+
 Prüfen: `filamentlager-ha-bridge --check`, Log:
 `journalctl -u filamentlager-ha-bridge -f`.
 

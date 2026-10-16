@@ -32,6 +32,7 @@
 #include "services/prefs_store.h"
 #include "settings_screen.h"
 #include "theme.h"
+#include "ha_design.h"
 #include "ui_common.h"
 
 void resetActivityTimer();
@@ -47,7 +48,7 @@ struct Place {
 
 struct Entry {
   std::vector<Place> places;
-  std::string name, vendor, material, family;
+  std::string name, vendor, material, family, name2;
   std::vector<std::string> features;
   uint32_t color = 0x888888;
   int spools = 0, refills = 0, weight = 1000, grams = 0, tags = 0, hue = 0, light = 0;
@@ -110,6 +111,20 @@ int load(std::string& err) {
     if (doc["detail"].is<const char*>()) err += std::string("\n") + (const char*)doc["detail"];
     return code;
   }
+  {   // the card's look, changed perhaps on the phone since
+    JsonDocument dd;
+    DeserializationError de2;
+    if (spoolmanGetJson(backendBaseUrl(), "/api/v1/design", dd, 5000, nullptr, &de2) == 200 && !de2) {
+      HaDesign d = haDesign();
+      const char* f = dd["farbe"] | "";
+      if (strlen(f) == 7 && f[0] == '#') d.accent = (uint32_t)strtoul(f + 1, nullptr, 16);
+      d.frame = dd["rand"] | 2;
+      if (d.frame < 1 || d.frame > 3) d.frame = 2;
+      d.compact = dd["kompakt"] | false;
+      d.bilingual = dd["zweisprachig"] | true;
+      haDesignStore(d);
+    }
+  }
   for (JsonObjectConst o : doc.as<JsonArrayConst>()) {
     Entry e;
     e.name = o["n"] | "";
@@ -125,6 +140,7 @@ int load(std::string& err) {
     for (int r : o["r"].as<JsonArrayConst>()) e.rests.push_back(r);
     for (const char* b : o["b"].as<JsonArrayConst>()) if (b && b[0]) e.features.push_back(b);
     JsonArrayConst ff = o["ff"];
+    e.name2 = o["f2"] | "";
     e.family = ff[0] | "Grau";
     e.hue = ff[1] | 0;
     e.light = ff[2] | 0;
@@ -311,7 +327,8 @@ uint32_t humColour(char c) {
 
 void addRow(lv_obj_t* grp, const Entry& e, const Place* in_slot, bool last) {
   lv_obj_t* row = plain(grp);
-  lv_obj_set_size(row, LV_PCT(100), 58);
+  const bool compact = haDesign().compact;
+  lv_obj_set_size(row, LV_PCT(100), compact ? 46 : 58);
   if (!last) {
     lv_obj_set_style_border_side(row, LV_BORDER_SIDE_BOTTOM, 0);
     lv_obj_set_style_border_width(row, 1, 0);
@@ -330,15 +347,22 @@ void addRow(lv_obj_t* grp, const Entry& e, const Place* in_slot, bool last) {
   lv_obj_t* name = lv_label_create(row);
   lv_label_set_long_mode(name, LV_LABEL_LONG_DOT);
   lv_obj_set_width(name, 300);
-  lv_label_set_text(name, e.name.c_str());
+  // The colour in the other language after the name, dimmer, as the card has it.
+  if (haDesign().bilingual && !e.name2.empty()) {
+    lv_label_set_recolor(name, true);
+    std::string t = e.name + " #8a8a8a | " + e.name2 + "#";
+    lv_label_set_text(name, t.c_str());
+  } else {
+    lv_label_set_text(name, e.name.c_str());
+  }
   lv_obj_set_style_text_color(name, lv_color_hex(UI_COL_INK), 0);
   lv_obj_set_style_text_font(name, &lv_font_montserrat_ext_14, 0);
-  lv_obj_set_pos(name, 34, 8);
+  lv_obj_set_pos(name, 34, compact ? 4 : 8);
 
   // chips in a row that clips what does not fit
   lv_obj_t* chips = plain(row);
   lv_obj_set_size(chips, 310, 18);
-  lv_obj_set_pos(chips, 34, 32);
+  lv_obj_set_pos(chips, 34, compact ? 25 : 32);
   lv_obj_set_flex_flow(chips, LV_FLEX_FLOW_ROW);
   lv_obj_set_style_pad_column(chips, 4, 0);
   lv_obj_set_flex_align(chips, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
@@ -413,10 +437,12 @@ void paintSortBar() {
   for (int i = 0; i < S_COUNT; i++) {
     if (!s_sort_btn[i]) continue;
     const bool on = i == s_sort;
-    lv_obj_set_style_bg_color(s_sort_btn[i], lv_color_hex(on ? 0x4caf50 : UI_COL_GROUND), 0);
-    lv_obj_set_style_border_color(s_sort_btn[i], lv_color_hex(on ? 0x4caf50 : 0x555555), 0);
+    const uint32_t a = haDesign().accent;
+    lv_obj_set_style_bg_color(s_sort_btn[i], lv_color_hex(on ? a : UI_COL_GROUND), 0);
+    lv_obj_set_style_border_color(s_sort_btn[i], lv_color_hex(on ? a : 0x555555), 0);
     lv_obj_t* l = lv_obj_get_child(s_sort_btn[i], 0);
-    if (l) lv_obj_set_style_text_color(l, lv_color_hex(on ? 0xffffff : UI_COL_INK), 0);
+    const int luma = (int)(0.299f * ((a >> 16) & 0xFF) + 0.587f * ((a >> 8) & 0xFF) + 0.114f * (a & 0xFF));
+    if (l) lv_obj_set_style_text_color(l, lv_color_hex(on ? (luma > 170 ? 0x111111 : 0xffffff) : UI_COL_INK), 0);
   }
   if (s_empty_btn) {
     lv_obj_set_style_bg_color(s_empty_btn, lv_color_hex(s_show_empty ? 0x3a1818 : UI_COL_GROUND), 0);
@@ -459,8 +485,8 @@ void fillList() {
     lv_obj_t* card = plain(s_list);
     lv_obj_set_width(card, LV_PCT(100));
     lv_obj_set_height(card, LV_SIZE_CONTENT);
-    lv_obj_set_style_border_width(card, 2, 0);
-    lv_obj_set_style_border_color(card, lv_color_hex(0x4caf50), 0);
+    lv_obj_set_style_border_width(card, haDesign().frame, 0);
+    lv_obj_set_style_border_color(card, lv_color_hex(haDesign().accent), 0);
     lv_obj_set_style_radius(card, 14, 0);
     lv_obj_set_style_pad_hor(card, 10, 0);
     lv_obj_set_flex_flow(card, LV_FLEX_FLOW_COLUMN);
@@ -507,8 +533,8 @@ void fillList() {
   }
   char kg[16], buf[120];
   fmtWeight(kg, sizeof(kg), grams);
-  snprintf(buf, sizeof(buf), "#4caf50 %s# | %d Sorten | %d Rollen (%d mit Spule, %d Refill)",
-           kg, kinds, rolls, rolls - refills, refills);
+  snprintf(buf, sizeof(buf), "#%06lx %s# | %d Sorten | %d Rollen (%d mit Spule, %d Refill)",
+           (unsigned long)UI_COL_ACCENT, kg, kinds, rolls, rolls - refills, refills);
   lv_label_set_text(s_summary, buf);
   if (s_empty_btn) {
     snprintf(buf, sizeof(buf), "Leer (%d)", empty);
