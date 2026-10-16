@@ -18,6 +18,7 @@
 //   SPOOLMANSCALE_SCALE=nearest         sharp pixel doubling instead of smooth scaling
 //   SPOOLMANSCALE_TOUCH_SWAP_XY=1, SPOOLMANSCALE_TOUCH_INVERT_X=1, SPOOLMANSCALE_TOUCH_INVERT_Y=1
 //   SPOOLMANSCALE_BACKLIGHT=/sys/class/backlight/<name>  backlight to dim
+//   SPOOLMANSCALE_TOUCH_DEBUG=1         log raw touch events and what LVGL is told
 
 #include "hardware/display.h"
 
@@ -439,6 +440,9 @@ int s_slot = 0;   // multi-touch slot being reported; only the first finger coun
 bool s_latched = false;
 int s_latch_x = 0, s_latch_y = 0;
 
+bool s_tdebug = false;
+unsigned long s_tdebug_reads = 0;
+
 void pollTouch() {
   ensureTouch();
   if (s_touch_fd < 0) return;
@@ -463,6 +467,8 @@ void pollTouch() {
         else if (e.code == ABS_MT_POSITION_Y || e.code == ABS_Y) s_raw_y = e.value;
         else if (e.code == ABS_MT_TRACKING_ID) s_down = e.value >= 0;
       } else if (e.type == EV_SYN && e.code == SYN_REPORT) {
+        if (s_tdebug)
+          fprintf(stderr, "TouchDbg: event %s raw=%d,%d\n", s_down ? "down" : "up", s_raw_x, s_raw_y);
         if (s_down) {
           s_latched = true;
           s_latch_x = s_raw_x;
@@ -478,6 +484,15 @@ void pollTouch() {
 void lvglTouch(lv_indev_drv_t*, lv_indev_data_t* data) {
   pollTouch();
   pollPipe();
+  if (s_tdebug) {
+    static unsigned long last_report = 0;
+    s_tdebug_reads++;
+    if (millis() - last_report >= 10000) {
+      last_report = millis();
+      fprintf(stderr, "TouchDbg: LVGL asked %lu times in 10 s, fd=%d\n", s_tdebug_reads, s_touch_fd);
+      s_tdebug_reads = 0;
+    }
+  }
   // Released already, but pressed since the last read: report the press now
   // (at its own position), the release on the next read.
   const bool pressed = s_down || s_latched;
@@ -502,6 +517,7 @@ void lvglTouch(lv_indev_drv_t*, lv_indev_data_t* data) {
     s_last_x = x;
     s_last_y = y;
     data->state = LV_INDEV_STATE_PR;
+    if (s_tdebug) fprintf(stderr, "TouchDbg: LVGL told PRESSED at %d,%d\n", x, y);
     if (s_touch_activity) s_touch_activity();
   } else {
     data->state = LV_INDEV_STATE_REL;
@@ -542,6 +558,7 @@ bool displayHardwareBegin(void (*touch_activity_cb)()) {
   s_swap_xy = envOn("SPOOLMANSCALE_TOUCH_SWAP_XY");
   s_inv_x = envOn("SPOOLMANSCALE_TOUCH_INVERT_X");
   s_inv_y = envOn("SPOOLMANSCALE_TOUCH_INVERT_Y");
+  s_tdebug = envOn("SPOOLMANSCALE_TOUCH_DEBUG");
 
   const bool have_fb = openFramebuffer();
   if (have_fb && s_fb_fd >= 0) {
