@@ -728,6 +728,66 @@ class Handler(BaseHTTPRequestHandler):
 
 # ------------------------------------------------------------------ setup ---
 
+def diagnose():
+    """Step by step: address, token, list, reading. Says which step fails."""
+    c = load_config()
+    print("Adresse:", c["url"] or "(leer)")
+    print("Liste:  ", c["entity"])
+    print("Token:  ", ("%d Zeichen" % len(c["token"])) if c["token"] else "(leer)")
+    if not c["url"] or not c["token"]:
+        print("-> zuerst: sudo filamentlager-ha-bridge --setup")
+        return 1
+
+    def get(path):
+        req = urllib.request.Request(c["url"] + path, headers={"Authorization": "Bearer " + c["token"]})
+        with urllib.request.urlopen(req, timeout=10) as r:
+            return r.status, r.read().decode()
+
+    try:
+        code, body = get("/api/")
+        print("1. Home Assistant erreichbar, Token gültig:", body.strip()[:60])
+    except urllib.error.HTTPError as e:
+        print("1. Home Assistant antwortet mit HTTP %d" % e.code)
+        if e.code == 401:
+            print("-> Token falsch oder abgelaufen: neues Token erstellen, --setup erneut")
+        elif e.code == 404:
+            print("-> Adresse zeigt nicht auf Home Assistant (Port 8123 vergessen?)")
+        return 1
+    except (urllib.error.URLError, OSError) as e:
+        print("1. Home Assistant nicht erreichbar:", e)
+        print("-> Adresse prüfen; im Browser des PCs öffnen; statt homeassistant.local die IP versuchen")
+        return 1
+    try:
+        code, body = get("/api/states/" + c["entity"])
+        st = json.loads(body)
+        print("2. Liste gefunden: %s, %s offene Einträge" % (
+            st.get("attributes", {}).get("friendly_name", c["entity"]), st.get("state")))
+    except urllib.error.HTTPError as e:
+        print("2. Liste %s gibt es in dieser Home-Assistant-Instanz nicht (HTTP %d)" % (c["entity"], e.code))
+        try:
+            code, body = get("/api/states")
+            todos = [x["entity_id"] for x in json.loads(body) if x["entity_id"].startswith("todo.")]
+            print("   Vorhandene Listen:", ", ".join(todos) or "keine")
+        except Exception:
+            pass
+        return 1
+    try:
+        items = HomeAssistant().get_items(fresh=True)
+        print("3. Gelesen: %d Filamentsorten" % len(items))
+        if not items:
+            print("-> Die Liste hat keine Einträge im FilamentLager-Format")
+        return 0
+    except HAError as e:
+        print("3. Lesen der Einträge klappt nicht:", e)
+        try:
+            code, body = get("/api/config")
+            print("   Home-Assistant-Version:", json.loads(body).get("version"),
+                  "(nötig: 2024.8 oder neuer)")
+        except Exception:
+            pass
+        return 1
+
+
 def setup():
     c = load_config()
     print("FilamentLager - Verbindung zu Home Assistant\n")
@@ -748,13 +808,8 @@ def setup():
         c["entity"] = ent
     save_config(c)
     print("\nGespeichert in", CONFIG_PATH)
-    try:
-        items = HomeAssistant().get_items(fresh=True)
-        print("Verbindung klappt: %d Filamentsorten in %s." % (len(items), c["entity"]))
-        return 0
-    except HAError as e:
-        print("Verbindung klappt noch nicht:", e)
-        return 1
+    print()
+    return diagnose()
 
 
 def main():
@@ -766,13 +821,7 @@ def main():
     if a.setup:
         sys.exit(setup())
     if a.check:
-        try:
-            items = HomeAssistant().get_items(fresh=True)
-            print("ok: %d Filamentsorten" % len(items))
-            sys.exit(0)
-        except HAError as e:
-            print("Fehler:", e)
-            sys.exit(1)
+        sys.exit(diagnose())
     B = Bridge()
     host, port = LISTEN.rsplit(":", 1)
     srv = ThreadingHTTPServer((host, int(port)), Handler)
