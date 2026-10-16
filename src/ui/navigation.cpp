@@ -33,6 +33,7 @@
 #include "ui/settings_screen.h"
 #include "ui/spool_flow.h"
 #include "ui/tag_view.h"
+#include "ui/lager_screen.h"
 
 
 void hideAllOverlays() {
@@ -55,6 +56,9 @@ void hideAllOverlays() {
 
   // Hide screens here. Deleting from a screen's own event callback can panic;
   // safe deletion is handled by showMainScreen() and showSettingsScreen().
+#ifdef SPOOLMANSCALE_PI
+  lagerScreenClose();
+#endif
   if (scr_settings)    lv_obj_add_flag(scr_settings,    LV_OBJ_FLAG_HIDDEN);
   if (scr_connection)  lv_obj_add_flag(scr_connection,  LV_OBJ_FLAG_HIDDEN);
   if (scr_scale_sub)   lv_obj_add_flag(scr_scale_sub,   LV_OBJ_FLAG_HIDDEN);

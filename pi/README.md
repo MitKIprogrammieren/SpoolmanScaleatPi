@@ -207,6 +207,11 @@ Sorte gehören, Leergewichte der Spulen, das Trocknungsdatum – liegt auf dem
 Pi in `/var/lib/spoolmanscale/ha_bridge_state.json`. Neue Sorten legt man
 weiter in der FilamentLager-Karte an.
 
+**Lager auf der Waage:** Im Home-Assistant-Modus hat das Einstellungsmenü
+(≡ unten rechts) unten den grünen Knopf **Lager**. Er zeigt alle Sorten mit
+Farbe, Rollen, offenen Resten und Bestand, filterbar nach PLA, PETG, ABS,
+ASA, TPU, Andere und Leer.
+
 Prüfen: `filamentlager-ha-bridge --check`, Log:
 `journalctl -u filamentlager-ha-bridge -f`.
 

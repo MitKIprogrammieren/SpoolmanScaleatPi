@@ -429,6 +429,30 @@ class Bridge:
                      for h in tags],
         }
 
+    def lager(self):
+        """The whole stock in one compact answer, for the scale's Lager screen:
+        sorted by manufacturer, material, name; grams as the card counts them."""
+        out = []
+        for it in self.items():
+            d = it["d"]
+            gw = gw_of(d)
+            sp = int(d.get("spulen") or 0)
+            rs = rests_of(d)
+            out.append({
+                "id": self.st.id_for(it["uid"]),
+                "n": it["summary"],
+                "v": d.get("hersteller") or "",
+                "m": d.get("material") or "",
+                "c": str(d.get("hex") or "").lstrip("#")[:6],
+                "s": max(sp, 0),
+                "r": [int(round(x)) for x in rs],
+                "w": int(gw),
+                "g": int(round((max(sp, 0) - len(rs)) * gw + sum(rs))) if sp > 0 else 0,
+                "t": len(self.st.tags_of(it["uid"])),
+            })
+        out.sort(key=lambda e: (e["v"].lower(), e["m"].lower(), e["n"].lower()))
+        return out
+
     # ---- writing -----------------------------------------------------------
 
     def write_weight(self, it, w, unarchive=False):
@@ -550,6 +574,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, {"version": VERSION, "debug_mode": False, "automatic_backups": False,
                                    "data_dir": "", "logs_dir": "", "backups_dir": "", "db_type": "home-assistant",
                                    "git_commit": "filamentlager-ha-bridge", "build_date": ""})
+        if p == "/api/v1/lager":
+            return self.send(200, B.lager())
         if p == "/api/v1/tag/reader":
             return self.send(200, [])
         if p == "/api/v1/tag/scan" and method == "POST":

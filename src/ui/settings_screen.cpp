@@ -17,6 +17,9 @@
 #include "services/backend.h"
 #include "services/user_options.h"
 #include "theme.h"
+#ifdef SPOOLMANSCALE_PI
+#include "lager_screen.h"
+#endif
 
 
 void resetActivityTimer();
@@ -63,6 +66,13 @@ void buildSettingsScreen() {
   };
   int tx[] = { 8, 242, 8, 242 };
   int ty[] = { 60, 60, 186, 186 };
+  int tile_h = 118;
+#ifdef SPOOLMANSCALE_PI
+  // Home Assistant FilamentLager: a full width "Lager" bar under the tiles,
+  // which move up and lose a little height to make room.
+  const bool lager = backendIsHomeAssistant();
+  if (lager) { ty[0] = ty[1] = 52; ty[2] = ty[3] = 150; tile_h = 92; }
+#endif
 
   // Kept so the update dot can be anchored to it after the loop.
   lv_obj_t *tile_system = nullptr;
@@ -70,7 +80,7 @@ void buildSettingsScreen() {
   for (int i = 0; i < 4; i++) {
     lv_obj_t *tile = lv_btn_create(scr_settings);
     if (i == 3) tile_system = tile;
-    lv_obj_set_size(tile, 226, 118);
+    lv_obj_set_size(tile, 226, tile_h);
     lv_obj_set_pos(tile, tx[i], ty[i]);
     lv_obj_set_style_bg_color(tile, lv_color_hex(tiles[i].col), 0);
     lv_obj_set_style_bg_color(tile, lv_color_hex(uiShade(tiles[i].col, UI_SHADE_PRESSED)), LV_STATE_PRESSED);
@@ -133,6 +143,33 @@ void buildSettingsScreen() {
   }
 
   lbl_system_badge = createUpdateBadge(scr_settings, tile_system);
+
+#ifdef SPOOLMANSCALE_PI
+  if (lager) {
+    lv_obj_t *bar = lv_btn_create(scr_settings);
+    lv_obj_set_size(bar, 460, 62);
+    lv_obj_set_pos(bar, 8, 250);
+    lv_obj_set_style_bg_color(bar, lv_color_hex(UI_COL_OK_BG), 0);
+    lv_obj_set_style_bg_color(bar, lv_color_hex(UI_COL_OK_BG_PRESSED), LV_STATE_PRESSED);
+    lv_obj_set_style_radius(bar, 10, 0);
+    lv_obj_set_style_shadow_width(bar, 0, 0);
+    lv_obj_set_style_border_width(bar, 0, 0);
+    lv_obj_t *l = lv_label_create(bar);
+    lv_label_set_text(l, LV_SYMBOL_LIST "   Lager");
+    lv_obj_set_style_text_color(l, lv_color_hex(UI_COL_OK_TEXT), 0);
+    lv_obj_set_style_text_font(l, &lv_font_montserrat_ext_20, 0);
+    lv_obj_align(l, LV_ALIGN_CENTER, 0, -8);
+    lv_obj_t *s = lv_label_create(bar);
+    lv_label_set_text(s, "Alle Filamente aus Home Assistant");
+    lv_obj_set_style_text_color(s, lv_color_hex(UI_COL_OK_TEXT), 0);
+    lv_obj_set_style_text_font(s, &lv_font_montserrat_ext_12, 0);
+    lv_obj_align(s, LV_ALIGN_CENTER, 0, 15);
+    lv_obj_add_event_cb(bar, [](lv_event_t *e) {
+      logSD("UI: Settings -> Lager");
+      showLagerScreen();
+    }, LV_EVENT_CLICKED, NULL);
+  }
+#endif
 
   if (sd_verbose) logSD("[verbose] buildSettingsScreen: done");
 }
