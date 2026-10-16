@@ -1528,7 +1528,15 @@ StringID tagWriteResultString(uint8_t code);
 // table - C pads the missing cell with nullptr - and a %s handed nullptr
 // restarts this board rather than printing "(null)". Falling back keeps such a
 // row readable until its French is added.
+#ifdef SPOOLMANSCALE_PI
+// Raspberry Pi wording for the few texts that describe ESP board wiring
+// (pi/override/pi_lang.cpp). nullptr: the table's text applies.
+const char* piLangText(int id, int lang);
+#endif
 static inline const char* langText(int id) {
+#ifdef SPOOLMANSCALE_PI
+  if (const char* pi = piLangText(id, g_lang)) return pi;
+#endif
   const char* s = STRINGS[id][g_lang];
   return s ? s : STRINGS[id][LANG_EN];
 }

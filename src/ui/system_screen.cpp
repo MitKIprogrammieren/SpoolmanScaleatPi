@@ -194,6 +194,11 @@ void buildSystemScreen() {
   lv_obj_t *row_fw =
   addRow(list, LV_SYMBOL_DOWNLOAD, T(STR_BTN_FW_UPDATE), T(STR_BTN_FW_SUB),
     [](lv_event_t *e){ logSD("BTN: -> OTA"); show_ota_pending = true; });
+#ifdef SPOOLMANSCALE_PI
+  // The Pi build is updated with git pull and a rebuild (see pi/README.md),
+  // not with ESP firmware images.
+  lv_obj_add_flag(row_fw, LV_OBJ_FLAG_HIDDEN);
+#endif
 
   addRow(list, LV_SYMBOL_LIST, T(STR_LANG_TITLE), T(STR_BTN_LANG_SUB),
     [](lv_event_t *e){ logSD("BTN: System -> Language"); showLanguageScreen(); });
@@ -207,11 +212,19 @@ void buildSystemScreen() {
   // backwards.
   { char rst_sub[40];
     copyT(rst_sub, sizeof(rst_sub), nfcResetVerified() ? STR_NFCRST_ROW_DONE : STR_NFCRST_ROW_SUB);
+    lv_obj_t *row_rst =
     addRow(list, LV_SYMBOL_CHARGE, T(STR_NFCRST_ROW), rst_sub,
       [](lv_event_t *e){
         logSD("BTN: System -> NFC reset probe");
         nfc_reset_probe_pending = true;
       });
+#ifdef SPOOLMANSCALE_PI
+    // The PN532 reset wire is an ESP board detail; on the Pi the reader
+    // runs over UART without it.
+    lv_obj_add_flag(row_rst, LV_OBJ_FLAG_HIDDEN);
+#else
+    (void)row_rst;
+#endif
   }
 
   // Own colours chosen in the web interface, taken back on the device: an

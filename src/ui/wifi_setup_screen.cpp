@@ -251,6 +251,10 @@ void buildWifiSetupScreen() {
   lv_obj_set_style_text_color(lbl_portal, lv_color_hex(UI_COL_ACCENT), 0);
   lv_obj_set_style_text_font(lbl_portal, &lv_font_montserrat_ext_14, 0);
   lv_obj_center(lbl_portal);
+#ifdef SPOOLMANSCALE_PI
+  // No hotspot of its own on the Pi; WiFi comes from the OS or this list.
+  lv_obj_add_flag(btn_portal, LV_OBJ_FLAG_HIDDEN);
+#endif
 
   // Scan button callback (after building list)
   lv_obj_add_event_cb(btn_scan, [](lv_event_t *e) {

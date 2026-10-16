@@ -1,0 +1,21 @@
+[Unit]
+Description=SpoolmanScale (filament scale)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# Optional settings (display rotation, touch, serial port): see pi/README.md.
+EnvironmentFile=-/etc/default/spoolmanscale
+ExecStart=/usr/local/bin/spoolmanscale
+# "Restart" in the scale's menu ends the program; systemd starts it again.
+Restart=always
+RestartSec=2
+# Settings, logs and the tag catalogue live in /var/lib/spoolmanscale.
+StateDirectory=spoolmanscale
+# Runs as root: it needs the framebuffer, the console, I2C, the serial port,
+# port 80 for the web interface and nmcli for the WiFi screen.
+User=root
+Nice=-5
+
+[Install]
+WantedBy=multi-user.target

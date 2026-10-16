@@ -38,6 +38,15 @@
 // The library's handleClient() with that one number changed. Everything it
 // touches is protected and the method is virtual, so this is an override
 // rather than a patched copy of the library.
+#ifdef SPOOLMANSCALE_PI
+// The Pi's WebServer (pi/compat) reads each request in one go and closes the
+// connection, so the ESP-specific client handling below is not needed.
+class ScaleWebServer : public WebServer {
+ public:
+  using WebServer::WebServer;
+  void tune() {}
+};
+#else
 class ScaleWebServer : public WebServer {
  public:
   using WebServer::WebServer;
@@ -111,6 +120,7 @@ class ScaleWebServer : public WebServer {
     if (callYield) yield();
   }
 };
+#endif  // SPOOLMANSCALE_PI
 
 static ScaleWebServer ota_server(80);
 static bool ota_server_running  = false;

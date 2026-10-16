@@ -246,6 +246,9 @@ bool updateCheckBusy() { return s_task_running; }
 // network. Comparing rather than trusting a stored flag means it corrects
 // itself: once FW_VERSION has caught up, the badge stays off on its own.
 void updateCheckRestoreBadge() {
+#ifdef SPOOLMANSCALE_PI
+  return;   // ESP firmware releases do not apply to the Pi build
+#endif
   String stored_s = prefsGetString("upd_ver", "");
   const char* stored = stored_s.c_str();
   if (stored[0] == '\0') return;
@@ -267,11 +270,18 @@ void updateCheckRestoreBadge() {
 }
 
 void updateCheckScheduleFirstRun() {
+#ifdef SPOOLMANSCALE_PI
+  return;
+#endif
   s_due_ms = millis() + FIRST_RUN_DELAY_MS + (esp_random() % FIRST_RUN_JITTER_MS);
   s_scheduled = true;
 }
 
 void updateCheckScheduleIn(unsigned long delay_ms) {
+#ifdef SPOOLMANSCALE_PI
+  (void)delay_ms;
+  return;
+#endif
   s_due_ms = millis() + delay_ms;
   s_scheduled = true;
 }

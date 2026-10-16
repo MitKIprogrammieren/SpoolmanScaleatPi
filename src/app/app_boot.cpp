@@ -1,4 +1,7 @@
 #include "app_boot.h"
+#ifdef SPOOLMANSCALE_PI
+#include "pi_platform.h"
+#endif
 
 #include <Arduino.h>
 #include <Wire.h>
@@ -154,6 +157,11 @@ void appSetup() {
   Serial.println("Context:    RFID-B");
 
   loadPrefs();
+#ifdef SPOOLMANSCALE_PI
+  // The Pi is online through the OS. Take that network as the configured one,
+  // so the setup goes on at the backend instead of asking for WiFi.
+  piAdoptOsNetwork();
+#endif
 
   // SD card init (early so logs can capture boot sequence)
   // Note: cleanOldLogs() is deferred until after NTP sync (in wifiConnect)

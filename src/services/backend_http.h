@@ -47,6 +47,7 @@
 // screen waiting on it - for two minutes. One takes about 0.6 s here.
 #define BACKEND_TLS_HANDSHAKE_S  10
 
+#ifndef SPOOLMANSCALE_PI
 class BackendTls : public WiFiClientSecure {
   using Base = WiFiClientSecure;
  public:
@@ -64,6 +65,8 @@ class BackendTls : public WiFiClientSecure {
 struct BackendTlsHolder {
   std::unique_ptr<BackendTls> tls;
 };
+#endif  // SPOOLMANSCALE_PI
+
 
 // The body of an answer sent "Transfer-Encoding: chunked", with the chunk
 // sizes taken out. A reverse proxy answers that way where the backend itself
@@ -147,6 +150,18 @@ class CountedStream : public Stream {
 // clients take a name that does not resolve for 0.0.0.0 and spend the whole
 // connect timeout on it, where core 2 gave up at once. begin() then returns
 // false and the request fails straight away.
+#ifdef SPOOLMANSCALE_PI
+// Raspberry Pi: libcurl inside HTTPClient keeps connections and TLS sessions
+// alive by itself, so this is only the trust setting on top of it.
+class BackendHttp : public HTTPClient {
+ public:
+  bool begin(const String& url);
+  bool begin(const char* url) { return begin(String(url)); }
+  void noPool() {}
+ private:
+  WiFiClientSecure tls_;
+};
+#else
 class BackendHttp : private BackendTlsHolder, public HTTPClient {
   using Http = HTTPClient;   // see BackendTls: keeps begin() and getStream() off the HTTP list
  public:
@@ -176,6 +191,8 @@ class BackendHttp : private BackendTlsHolder, public HTTPClient {
   ChunkedStream chunked_;
   CountedStream counted_;
 };
+#endif  // SPOOLMANSCALE_PI
+
 
 // True for an address that starts with "https://", any case.
 bool backendUrlIsHttps(const char* url);

@@ -1,0 +1,22 @@
+# Settings for the SpoolmanScale service. Remove the # in front of a line to
+# use it, then: sudo systemctl restart spoolmanscale
+
+# Picture upside down (and touch with it).
+#SPOOLMANSCALE_ROTATE=180
+
+# Sharp pixel scaling instead of smooth.
+#SPOOLMANSCALE_SCALE=nearest
+
+# Touch axes, if a tap lands in the wrong place.
+#SPOOLMANSCALE_TOUCH_SWAP_XY=1
+#SPOOLMANSCALE_TOUCH_INVERT_X=1
+#SPOOLMANSCALE_TOUCH_INVERT_Y=1
+#SPOOLMANSCALE_TOUCH=/dev/input/event0
+
+# PN532: another serial port, or "i2c" for the I2C bus as on the ESP build.
+#SPOOLMANSCALE_PN532=/dev/serial0
+
+# Other devices.
+#SPOOLMANSCALE_FB=/dev/fb0
+#SPOOLMANSCALE_I2C=/dev/i2c-1
+#SPOOLMANSCALE_BACKLIGHT=/sys/class/backlight/10-0045

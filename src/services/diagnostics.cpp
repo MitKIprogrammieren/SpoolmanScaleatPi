@@ -77,7 +77,13 @@ void diagnosticsTick() {
   // Probed live rather than read from the boot scan, so a connector that is
   // pushed back in takes effect without a restart. 0x2A is already answered by
   // the scale watchdog every 5 s, so only the reader costs a transaction here.
+#ifdef SPOOLMANSCALE_PI
+  // On the Pi the reader is on its own UART, not on I2C: "on the bus" means
+  // it answers there. A working reader is not pinged again.
+  pn532_on_bus = nfc_ok || nfcHardwarePing();
+#else
   pn532_on_bus = i2cPresent(I2C_EXT, I2C_ADDR_PN532);
+#endif
   // A device built without a load cell has no NAU7802 to miss, so its silence
   // is the configuration rather than a finding. Asked as "is one missing" and
   // not as "is one there": the reader's own verdicts below have to go on
