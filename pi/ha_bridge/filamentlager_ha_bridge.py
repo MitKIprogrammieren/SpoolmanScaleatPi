@@ -85,7 +85,13 @@ def load_config():
     c.setdefault("url", "")
     c.setdefault("token", "")
     c.setdefault("entity", "todo.filament")
-    c["url"] = c["url"].rstrip("/")
+    c["url"] = c["url"].strip().rstrip("/")
+    c["token"] = c["token"].strip()
+    # "Filament Liste" or "filament" -> "todo.filament_liste" / "todo.filament"
+    ent = re.sub(r"\s+", "_", str(c["entity"] or "todo.filament").strip().lower())
+    if not ent.startswith("todo."):
+        ent = "todo." + ent.split(".")[-1]
+    c["entity"] = ent
     return c
 
 
@@ -195,7 +201,13 @@ class HomeAssistant:
             with urllib.request.urlopen(req, timeout=timeout) as r:
                 txt = r.read().decode()
         except urllib.error.HTTPError as e:
-            raise HAError("HTTP %d from Home Assistant (%s)" % (e.code, e.read()[:200].decode(errors="replace")))
+            hint = ""
+            if e.code == 400:
+                hint = " - gibt es die Liste %s? (Entwicklerwerkzeuge -> Zustände)" % c["entity"]
+            elif e.code == 401:
+                hint = " - Token falsch oder abgelaufen"
+            raise HAError("HTTP %d from Home Assistant (%s)%s" % (
+                e.code, e.read()[:200].decode(errors="replace"), hint))
         except (urllib.error.URLError, OSError) as e:
             raise HAError("Home Assistant not reachable: %s" % e)
         return json.loads(txt) if txt else {}
