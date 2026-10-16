@@ -412,19 +412,47 @@ void openTouch() {
     s_touch_fd = fd;
     return;
   }
-  fprintf(stderr, "Touch: no touch screen found under /dev/input\n");
+  static bool said = false;
+  if (!said) {
+    fprintf(stderr, "Touch: no touch screen found under /dev/input yet - still looking\n");
+    said = true;
+  }
 }
 
+// The panel's touch driver can come up after this program has started, and a
+// device can go away and come back. Look again every two seconds while none
+// is open.
+void ensureTouch() {
+  if (s_touch_fd >= 0 || s_pipe_fd >= 0) return;
+  static unsigned long last = 0;
+  if (last && millis() - last < 2000) return;
+  last = millis();
+  openTouch();
+}
+
+int s_slot = 0;   // multi-touch slot being reported; only the first finger counts
+
 void pollTouch() {
+  ensureTouch();
   if (s_touch_fd < 0) return;
   struct input_event ev[64];
   for (;;) {
     ssize_t n = read(s_touch_fd, ev, sizeof(ev));
+    if (n < 0 && errno == ENODEV) {
+      fprintf(stderr, "Touch: device went away, looking for it again\n");
+      close(s_touch_fd);
+      s_touch_fd = -1;
+      s_down = false;
+      break;
+    }
     if (n <= 0) break;
     for (size_t i = 0; i < (size_t)n / sizeof(ev[0]); i++) {
       const input_event& e = ev[i];
       if (e.type == EV_ABS) {
-        if (e.code == ABS_MT_POSITION_X || e.code == ABS_X) s_raw_x = e.value;
+        if (e.code == ABS_MT_SLOT) s_slot = e.value;
+        else if (s_slot != 0 && (e.code == ABS_MT_POSITION_X || e.code == ABS_MT_POSITION_Y ||
+                                 e.code == ABS_MT_TRACKING_ID)) continue;
+        else if (e.code == ABS_MT_POSITION_X || e.code == ABS_X) s_raw_x = e.value;
         else if (e.code == ABS_MT_POSITION_Y || e.code == ABS_Y) s_raw_y = e.value;
         else if (e.code == ABS_MT_TRACKING_ID) s_down = e.value >= 0;
       } else if (e.type == EV_KEY && e.code == BTN_TOUCH) {
