@@ -176,6 +176,13 @@ void backendLoadSettings() {
 
   String ha_host = prefsGetString(NVS_HA_HOST, HA_BRIDGE_DEFAULT);
   snprintf(s_ha_host, sizeof(s_ha_host), "%s", ha_host.length() ? ha_host.c_str() : HA_BRIDGE_DEFAULT);
+  {   // an earlier build let Home Assistant's own address in here
+    const size_t hl = strlen(s_ha_host);
+    if (hl >= 5 && strcmp(s_ha_host + hl - 5, ":8123") == 0) {
+      snprintf(s_ha_host, sizeof(s_ha_host), "%s", HA_BRIDGE_DEFAULT);
+      prefsPutString(NVS_HA_HOST, s_ha_host);
+    }
+  }
   s_ha = (s_mode == BACKEND_SPOOLMAN) && prefsGetUChar(NVS_HA_ON, 0) == 1;
   if (s_ha) haSwap(true);
 
@@ -284,7 +291,13 @@ void backendSetHost(const char* host) {
       return;
     default:
       if (s_ha) {
-        snprintf(s_ha_host, sizeof(s_ha_host), "%s", host[0] ? host : HA_BRIDGE_DEFAULT);
+        // Home Assistant's own address (port 8123) is what people type here,
+        // but the scale talks to the bridge; HA's address is the bridge's.
+        const size_t hl = strlen(host);
+        const bool is_ha_itself = hl >= 5 && strcmp(host + hl - 5, ":8123") == 0;
+        if (is_ha_itself) logSDf("Backend: %s is Home Assistant itself, keeping the bridge", host);
+        snprintf(s_ha_host, sizeof(s_ha_host), "%s",
+                 (host[0] && !is_ha_itself) ? host : HA_BRIDGE_DEFAULT);
         prefsPutString(NVS_HA_HOST, s_ha_host);
         strncpy(cfg_spoolman_ip, s_ha_host, sizeof(cfg_spoolman_ip) - 1);
         cfg_spoolman_ip[sizeof(cfg_spoolman_ip) - 1] = '\0';

@@ -263,6 +263,10 @@ void buildSpoolmanScreen() {
     // and this is the one line that says so before anyone looks for it.
     snprintf(buf_hint, sizeof(buf_hint), "192.168.x.x:%s  -  %s", def_port, T(STR_SP_HTTPS_HINT));
   }
+  // Home Assistant: the scale talks to the bridge on the Pi itself, never to
+  // Home Assistant directly - that address belongs in the bridge's setup.
+  if (backendIsHomeAssistant())
+    snprintf(buf_hint, sizeof(buf_hint), "Brücke auf dem Pi: 127.0.0.1:7913");
   lv_obj_t *lbl_hint = lv_label_create(scr_spoolman);
   lv_label_set_text(lbl_hint, buf_hint);
   lv_obj_set_style_text_color(lbl_hint, lv_color_hex(sp_locked ? UI_COL_WARN : UI_COL_CAPTION), 0);
