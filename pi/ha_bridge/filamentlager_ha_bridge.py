@@ -247,6 +247,47 @@ class HomeAssistant:
 
 # ------------------------------------------------------------ the model ----
 
+def color_family(hexcol):
+    """Colour family the way the card groups by colour: name, hue, lightness."""
+    h = str(hexcol or "#888888").lstrip("#")
+    try:
+        r, g, b = (int(h[i:i + 2], 16) / 255 for i in (0, 2, 4))
+    except ValueError:
+        r = g = b = 0.53
+    mx, mn = max(r, g, b), min(r, g, b)
+    l, d = (mx + mn) / 2, mx - mn
+    s = 0 if d == 0 else d / (1 - abs(2 * l - 1))
+    hue = 0.0
+    if d:
+        if mx == r:
+            hue = 60 * (((g - b) / d) % 6)
+        elif mx == g:
+            hue = 60 * ((b - r) / d + 2)
+        else:
+            hue = 60 * ((r - g) / d + 4)
+    if hue < 0:
+        hue += 360
+    if l < 0.12:
+        f = "Schwarz"
+    elif s < 0.15 or d < 0.08:
+        f = "Weiß" if l > 0.85 else "Grau"
+    elif hue < 15 or hue >= 345:
+        f = "Rot"
+    elif hue < 45:
+        f = "Braun" if l < 0.38 else "Orange"
+    elif hue < 70:
+        f = "Braun" if l < 0.35 else "Gelb"
+    elif hue < 185:
+        f = "Grün"
+    elif hue < 255:
+        f = "Blau"
+    elif hue < 290:
+        f = "Lila"
+    else:
+        f = "Pink"
+    return [f, int(hue), int(l * 100)]
+
+
 def gw_of(d):
     try:
         return float(d.get("gewicht") or 1000)
@@ -449,6 +490,9 @@ class Bridge:
                 "w": int(gw),
                 "g": int(round((max(sp, 0) - len(rs)) * gw + sum(rs))) if sp > 0 else 0,
                 "t": len(self.st.tags_of(it["uid"])),
+                "b": [str(x) for x in (d.get("besonderheiten") or [])],
+                "f": max(0, min(int(d.get("refills") or 0), max(sp, 0))),
+                "ff": color_family(d.get("hex")),
             })
         out.sort(key=lambda e: (e["v"].lower(), e["m"].lower(), e["n"].lower()))
         return out
