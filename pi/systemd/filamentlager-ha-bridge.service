@@ -1,0 +1,17 @@
+[Unit]
+Description=FilamentLager bridge to Home Assistant (Spoolman API on 127.0.0.1:7913)
+After=network-online.target
+Wants=network-online.target
+Before=spoolmanscale.service
+
+[Service]
+# Home Assistant address and token: sudo filamentlager-ha-bridge --setup
+ExecStart=/usr/bin/python3 /usr/local/bin/filamentlager-ha-bridge
+Restart=always
+RestartSec=3
+# Tags, ids and spool weights the Home Assistant list has no field for.
+StateDirectory=spoolmanscale
+User=root
+
+[Install]
+WantedBy=multi-user.target

@@ -17,7 +17,7 @@
 // the caches and the sessions, the screens own what is on the panel. A service
 // calling into the screens would turn the layering upside down, and the device
 // path and the web path both have to take exactly the same steps.
-void backendApplyMode(BackendMode mode);
+void backendApplyMode(BackendMode mode, bool home_assistant = false);
 
 // Changing the address of the current backend. The mode stays, but every
 // cache that holds the old server's answers has to go: the FilaMan location

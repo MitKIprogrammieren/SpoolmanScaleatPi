@@ -43,6 +43,11 @@ BackendMode backendMode();
 void        backendSetMode(BackendMode mode);   // persists to NVS
 bool        backendIsFilaMan();
 bool        backendIsBamBuddy();
+// Home Assistant FilamentLager, reached through the Spoolman compatible
+// bridge in pi/ha_bridge. backendMode() stays BACKEND_SPOOLMAN, so everything
+// takes the Spoolman path; name, badge and address are its own.
+bool        backendIsHomeAssistant();
+void        backendSetSelection(BackendMode mode, bool home_assistant);   // persists
 
 // Base URL of the active backend, always without a trailing slash.
 // In Spoolman mode this is cfg_spoolman_base, so existing behaviour

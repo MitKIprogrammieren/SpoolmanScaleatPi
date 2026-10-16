@@ -44,8 +44,9 @@ void backendApplyHost(const char *host) {
   sm_reachable = false;          // unknown until the new address answers
 }
 
-void backendApplyMode(BackendMode mode) {
-  if (mode == backendMode()) return;
+void backendApplyMode(BackendMode mode, bool home_assistant) {
+  if (mode != BACKEND_SPOOLMAN) home_assistant = false;
+  if (mode == backendMode() && home_assistant == backendIsHomeAssistant()) return;
   s_generation++;
   backendConnClose();   // open to the old backend's server
   // Before the mode changes under it: the rest of a drying batch would
@@ -78,7 +79,7 @@ void backendApplyMode(BackendMode mode) {
 
   // ---- the switch itself -------------------------------------------------
 
-  backendSetMode(mode);
+  backendSetSelection(mode, home_assistant);
   logSDf("Backend: %s -> %s (full reset)", from, backendName());
 
   // ---- caches and sessions that belong to the backend just left ----------

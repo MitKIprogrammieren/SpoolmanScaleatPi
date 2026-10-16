@@ -23,6 +23,10 @@
 #define NVS_SM_USER         "sm_user"
 #define NVS_SM_SECRET       "sm_secret"
 #define NVS_SM_BIND         "sm_bind"
+#define NVS_HA_ON           "be_ha"
+#define NVS_HA_HOST         "ha_host"
+// The FilamentLager bridge (pi/ha_bridge) runs on the Pi itself.
+#define HA_BRIDGE_DEFAULT   "127.0.0.1:7913"
 
 static BackendMode s_mode = BACKEND_SPOOLMAN;
 static char s_api_key[80]      = "";
@@ -33,6 +37,28 @@ static char s_filaman_base[80] = "";
 static char s_bambuddy_key[80]  = "";
 static char s_bambuddy_host[64] = "";
 static char s_bambuddy_base[80] = "";
+
+// Home Assistant FilamentLager: a flavour of Spoolman mode. The bridge in
+// pi/ha_bridge answers Spoolman's API out of the todo list the Home Assistant
+// card keeps, so every read and write takes the Spoolman path unchanged. Only
+// the address and the name differ. While it is on, cfg_spoolman_ip/base hold
+// the bridge address - most callers pass cfg_spoolman_base directly - and the
+// real Spoolman address waits in s_sm_ip_saved, never overwritten in NVS.
+static bool s_ha = false;
+static char s_ha_host[64] = HA_BRIDGE_DEFAULT;
+static char s_sm_ip_saved[64] = "";
+
+static void haSwap(bool on) {
+  if (on) {
+    strncpy(s_sm_ip_saved, cfg_spoolman_ip, sizeof(s_sm_ip_saved) - 1);
+    s_sm_ip_saved[sizeof(s_sm_ip_saved) - 1] = '\0';
+    strncpy(cfg_spoolman_ip, s_ha_host, sizeof(cfg_spoolman_ip) - 1);
+  } else {
+    strncpy(cfg_spoolman_ip, s_sm_ip_saved, sizeof(cfg_spoolman_ip) - 1);
+  }
+  cfg_spoolman_ip[sizeof(cfg_spoolman_ip) - 1] = '\0';
+  backendComposeBase(cfg_spoolman_base, sizeof(cfg_spoolman_base), cfg_spoolman_ip);
+}
 static uint8_t s_sm_auth        = SM_AUTH_NONE;
 static char    s_sm_user[64]    = "";
 static char    s_sm_secret[SM_SECRET_MAX_LEN + 1] = "";
@@ -148,6 +174,11 @@ void backendLoadSettings() {
   s_bambuddy_host[sizeof(s_bambuddy_host) - 1] = '\0';
   rebuildBamBuddyBase();
 
+  String ha_host = prefsGetString(NVS_HA_HOST, HA_BRIDGE_DEFAULT);
+  snprintf(s_ha_host, sizeof(s_ha_host), "%s", ha_host.length() ? ha_host.c_str() : HA_BRIDGE_DEFAULT);
+  s_ha = (s_mode == BACKEND_SPOOLMAN) && prefsGetUChar(NVS_HA_ON, 0) == 1;
+  if (s_ha) haSwap(true);
+
   // Both channels, so the active backend is visible in a serial monitor as
   // well and not only on the card. writeBootBlock() repeats the same line
   // inside the daily log file, which is the one a user actually sends in.
@@ -160,14 +191,21 @@ void backendLoadSettings() {
 BackendMode backendMode() { return s_mode; }
 bool backendIsFilaMan()   { return s_mode == BACKEND_FILAMAN; }
 bool backendIsBamBuddy()  { return s_mode == BACKEND_BAMBUDDY; }
+bool backendIsHomeAssistant() { return s_ha; }
 
-void backendSetMode(BackendMode mode) {
+void backendSetSelection(BackendMode mode, bool home_assistant) {
   s_mode = (mode == BACKEND_FILAMAN)  ? BACKEND_FILAMAN
          : (mode == BACKEND_BAMBUDDY) ? BACKEND_BAMBUDDY
                                       : BACKEND_SPOOLMAN;
+  const bool ha = home_assistant && s_mode == BACKEND_SPOOLMAN;
+  if (ha != s_ha) haSwap(ha);
+  s_ha = ha;
   prefsPutUChar(NVS_BACKEND_MODE, (uint8_t)s_mode);
+  prefsPutUChar(NVS_HA_ON, s_ha ? 1 : 0);
   logSDf("Backend: mode -> %s", backendName());
 }
+
+void backendSetMode(BackendMode mode) { backendSetSelection(mode, false); }
 
 const char* backendBaseUrl() {
   switch (s_mode) {
@@ -245,6 +283,15 @@ void backendSetHost(const char* host) {
       logSDf("Backend: BamBuddy host -> %s", s_bambuddy_host);
       return;
     default:
+      if (s_ha) {
+        snprintf(s_ha_host, sizeof(s_ha_host), "%s", host[0] ? host : HA_BRIDGE_DEFAULT);
+        prefsPutString(NVS_HA_HOST, s_ha_host);
+        strncpy(cfg_spoolman_ip, s_ha_host, sizeof(cfg_spoolman_ip) - 1);
+        cfg_spoolman_ip[sizeof(cfg_spoolman_ip) - 1] = '\0';
+        backendComposeBase(cfg_spoolman_base, sizeof(cfg_spoolman_base), cfg_spoolman_ip);
+        logSDf("Backend: Home Assistant bridge -> %s", s_ha_host);
+        return;
+      }
       saveSpoolmanIP(host);   // unchanged path, same NVS key as before
       return;
   }
@@ -320,7 +367,7 @@ const char* backendModeName(BackendMode mode) {
   }
 }
 
-const char* backendName() { return backendModeName(s_mode); }
+const char* backendName() { return s_ha ? "HA-Lager" : backendModeName(s_mode); }
 
 const char* backendBadge() {
   switch (s_mode) {
@@ -328,7 +375,7 @@ const char* backendBadge() {
     // Which database is behind BamBuddy decides where every read and write
     // lands, and it can change while the scale runs - worth the one letter.
     case BACKEND_BAMBUDDY: return (bbInventoryMode() == BB_INV_SPOOLMAN) ? "BBS" : "BBY";
-    default:               return "SPM";
+    default:               return s_ha ? "HA" : "SPM";
   }
 }
 
@@ -342,6 +389,7 @@ bool backendSpoolPageUrl(int spool_id, char* out, size_t out_size) {
   out[0] = '\0';
   const char* base = backendBaseUrl();
   if (spool_id <= 0 || !base || !base[0]) return false;
+  if (s_ha) return false;   // the bridge has no pages
   switch (s_mode) {
     case BACKEND_SPOOLMAN:
       snprintf(out, out_size, "%s/spool/show/%d", base, spool_id);
@@ -392,7 +440,7 @@ void backendText(const char* src, char* out, size_t out_size) {
   if (!src) return;
 
   // In Spoolman mode nothing changes, so take the cheap path.
-  if (s_mode == BACKEND_SPOOLMAN) {
+  if (s_mode == BACKEND_SPOOLMAN && !s_ha) {
     strncpy(out, src, out_size - 1);
     out[out_size - 1] = '\0';
     return;

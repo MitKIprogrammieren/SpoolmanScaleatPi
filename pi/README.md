@@ -165,6 +165,51 @@ Helligkeit und Abschalten im Ruhezustand laufen über
 `/sys/class/backlight`, falls das Display dort einen Regler anbietet,
 sonst über das Abschalten des Bildschirms.
 
+## Home Assistant FilamentLager als Filamentverwaltung
+
+Unter Einstellungen → Verbindung → Filamentverwaltung gibt es auf dem Pi
+neben Spoolman, FilaMan und BamBuddy einen vierten Knopf **Home Assistant**.
+Die Waage arbeitet dann direkt mit der Liste der FilamentLager-Karte
+(„Ernsthaft gelagert“, `todo.filament`) in Home Assistant.
+
+Dazwischen sitzt eine kleine Brücke auf dem Pi
+(`pi/ha_bridge/filamentlager_ha_bridge.py`, Dienst
+`filamentlager-ha-bridge`). Sie spricht nach innen die Sprache von Spoolman
+und liest und schreibt nach außen die Liste in Home Assistant.
+
+Einmal einrichten:
+
+1. In Home Assistant unten links auf das Profil → Reiter „Sicherheit“ →
+   ganz unten „Token erstellen“, Namen vergeben, Token kopieren.
+2. Auf dem Pi:
+   ```bash
+   sudo filamentlager-ha-bridge --setup
+   ```
+   Adresse (z. B. `http://homeassistant.local:8123`) und Token eingeben. Am
+   Ende steht, wie viele Filamentsorten gefunden wurden.
+3. An der Waage Filamentverwaltung → **Home Assistant** wählen. Die Adresse
+   `127.0.0.1:7913` (die Brücke) ist schon eingetragen.
+
+So passen die beiden Welten zusammen:
+
+| Waage | Home Assistant |
+|---|---|
+| eine „Spule“ mit ID | ein Eintrag der Liste (eine Filamentsorte) |
+| Restgewicht | der Rest der gerade gescannten Rolle aus `reste`, sonst eine volle Rolle |
+| NFC-Tag verknüpfen | mehrere Tags pro Sorte möglich, einer pro Rolle |
+| Gewicht updaten | ersetzt den Rest dieser Rolle; eine volle Rolle wird zu einem neuen Rest |
+| leer (unter 5 g) | Rest fällt weg, `spulen` sinkt um 1 |
+| Lagerort | zeigt „3 Rollen (1 offen)“ |
+
+Alles andere im Eintrag (Codes, Bambu-ID, Temperaturen, Preis …) bleibt
+unverändert. Was Home Assistant nicht speichert – welche Tags zu welcher
+Sorte gehören, Leergewichte der Spulen, das Trocknungsdatum – liegt auf dem
+Pi in `/var/lib/spoolmanscale/ha_bridge_state.json`. Neue Sorten legt man
+weiter in der FilamentLager-Karte an.
+
+Prüfen: `filamentlager-ha-bridge --check`, Log:
+`journalctl -u filamentlager-ha-bridge -f`.
+
 ## Was anders ist als beim ESP
 
 | Funktion | Pi |

@@ -250,6 +250,7 @@ void buildSpoolmanScreen() {
   // nothing is appended - an address typed without a port goes to 80.
   const char* def_port = (backendMode() == BACKEND_FILAMAN)  ? "8083"
                        : (backendMode() == BACKEND_BAMBUDDY) ? "8000"
+                       : backendIsHomeAssistant()            ? "7913"
                                                              : "7912";
   char buf_hint[80];
   if (sp_locked) {

@@ -25,6 +25,7 @@
 // otherwise the callback would delete the button it is currently running on.
 // The flag is consumed in appLoop(), which rebuilds the screen.
 static BackendMode s_pending_mode = BACKEND_SPOOLMAN;
+static bool s_pending_ha = false;   // Home Assistant, a flavour of Spoolman mode
 static bool s_mode_change_pending = false;
 
 static void applyPendingModeChange() {
@@ -35,10 +36,11 @@ static void applyPendingModeChange() {
   // the way the language screen offers it; appLoop() opens the question on
   // its next pass, over the rebuilt screen. Asked before the switch, which
   // changes what "the current backend" is.
-  const bool palette_moves = !setup_active && uiThemeFollowMoves(s_pending_mode);
+  const bool palette_moves = !setup_active && s_pending_mode != backendMode() &&
+                             uiThemeFollowMoves(s_pending_mode);
   // One switch for both entry points. What it lets go of used to be spelled
   // out here and stopped after three steps - see app/backend_switch.cpp.
-  backendApplyMode(s_pending_mode);
+  backendApplyMode(s_pending_mode, s_pending_ha);
   if (palette_moves) {
     logSD("Theme: the backend switch moves the palette, restart offered");
     show_reboot_pending = true;
@@ -201,44 +203,60 @@ void buildBackendScreen() {
     });
   }
 
-  // --- mode selector: three segments side by side ---------------
+  // --- mode selector: one segment per backend --------------------
   // 480 px wide screen: 12 px margin, three 145 px segments, 10 px between.
-  const int SEG_W = 145, SEG_H = 54, SEG_Y = 54;
+  // The Pi adds Home Assistant as a fourth: four 108 px segments, 8 px apart.
   const bool is_filaman = backendIsFilaMan();
 
-  struct Seg { BackendMode mode; int x; };
-  const Seg segs[3] = {
-    { BACKEND_SPOOLMAN,  12 },
-    { BACKEND_FILAMAN,  167 },
-    { BACKEND_BAMBUDDY, 322 }
+  struct Seg { BackendMode mode; bool ha; const char *name; };
+  const Seg segs[] = {
+    { BACKEND_SPOOLMAN, false, "Spoolman" },
+    { BACKEND_FILAMAN,  false, "FilaMan" },
+    { BACKEND_BAMBUDDY, false, "BamBuddy" },
+#ifdef SPOOLMANSCALE_PI
+    { BACKEND_SPOOLMAN, true,  "Home\nAssistant" },
+#endif
   };
+  const int n_segs = (int)(sizeof(segs) / sizeof(segs[0]));
+  const int SEG_GAP = n_segs > 3 ? 8 : 10;
+  const int SEG_W = (480 - 24 - SEG_GAP * (n_segs - 1)) / n_segs, SEG_H = 54, SEG_Y = 54;
 
-  for (int i = 0; i < 3; i++) {
-    const bool active = (segs[i].mode == backendMode());
+  for (int i = 0; i < n_segs; i++) {
+    const bool active = segs[i].mode == backendMode() && segs[i].ha == backendIsHomeAssistant();
 
     lv_obj_t *b = lv_btn_create(scr_backend);
     lv_obj_set_size(b, SEG_W, SEG_H);
-    lv_obj_set_pos(b, segs[i].x, SEG_Y);
+    lv_obj_set_pos(b, 12 + i * (SEG_W + SEG_GAP), SEG_Y);
     lv_obj_set_style_bg_color(b, lv_color_hex(active ? UI_COL_PICKED_BG : UI_COL_SURFACE), 0);
     lv_obj_set_style_bg_color(b, lv_color_hex(UI_COL_PRESS_FILL), LV_STATE_PRESSED);
     lv_obj_set_style_radius(b, 10, 0);
     lv_obj_set_style_shadow_width(b, 0, 0);
     lv_obj_set_style_border_width(b, active ? 2 : 1, 0);
     lv_obj_set_style_border_color(b, lv_color_hex(active ? UI_COL_ACCENT : UI_COL_LINE_SOFT), 0);
+    lv_obj_set_style_pad_all(b, 2, 0);
 
     lv_obj_t *l = lv_label_create(b);
-    lv_label_set_text(l, backendModeName(segs[i].mode));
+    lv_label_set_text(l, segs[i].name);
     lv_obj_set_style_text_color(l, lv_color_hex(active ? UI_COL_ACCENT : UI_COL_OFF_TEXT), 0);
-    lv_obj_set_style_text_font(l, &lv_font_montserrat_ext_18, 0);
+    const bool two_lines = strchr(segs[i].name, '\n') != nullptr;
+    lv_obj_set_style_text_font(l, two_lines ? &lv_font_montserrat_ext_14
+                                  : (n_segs > 3 ? &lv_font_montserrat_ext_16 : &lv_font_montserrat_ext_18), 0);
+    lv_obj_set_style_text_align(l, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_center(l);
 
-    // The mode is stored in user_data so one callback serves every button.
-    lv_obj_set_user_data(b, (void *)(intptr_t)segs[i].mode);
+    // The segment index is stored in user_data so one callback serves every button.
+    lv_obj_set_user_data(b, (void *)(intptr_t)i);
     lv_obj_add_event_cb(b, [](lv_event_t *e) {
-      BackendMode m = (BackendMode)(intptr_t)lv_obj_get_user_data(lv_event_get_target(e));
-      if (m == backendMode()) return;               // already active, nothing to do
-      logSDf("BTN: Backend -> %s", backendModeName(m));   // m, not the active mode
+      static const struct { BackendMode mode; bool ha; } kSel[] = {
+        { BACKEND_SPOOLMAN, false }, { BACKEND_FILAMAN, false },
+        { BACKEND_BAMBUDDY, false }, { BACKEND_SPOOLMAN, true } };
+      const int idx = (int)(intptr_t)lv_obj_get_user_data(lv_event_get_target(e));
+      const BackendMode m = kSel[idx].mode;
+      const bool ha = kSel[idx].ha;
+      if (m == backendMode() && ha == backendIsHomeAssistant()) return;   // already active
+      logSDf("BTN: Backend -> %s", ha ? "HA-Lager" : backendModeName(m));
       s_pending_mode = m;
+      s_pending_ha = ha;
       s_mode_change_pending = true;
       show_backend_pending = true;                  // rebuild from appLoop()
     }, LV_EVENT_CLICKED, NULL);
