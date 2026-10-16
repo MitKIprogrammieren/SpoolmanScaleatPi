@@ -18,7 +18,7 @@ void piThemeOverlay(int id) {
   UI_COL_SURFACE = 0x1c1c1c;
   UI_COL_ROW = 0x232323;
   UI_COL_ROW_PRESSED = 0x2e3a26;
-  UI_COL_LINE = 0x4f8a28;
+  UI_COL_LINE = 0x33492a;          // frames and the fill of unchosen buttons: dark enough for light text
   UI_COL_LINE_SOFT = 0x2c2c2c;
   UI_COL_PRESS_FILL = 0x3a6420;
   UI_COL_ROW_PRESS_FILL = 0x2e3a26;
@@ -35,7 +35,7 @@ void piThemeOverlay(int id) {
   UI_COL_RULE = 0x3a3a3a;
   UI_COL_INK_FAINT = 0x3a3a3a;
   UI_COL_VALUE_BLUE = 0xcfcfcf;
-  UI_COL_ON_ACCENT = 0xffffff;
+  UI_COL_ON_ACCENT = 0x111111;     // text on a bright green ACCENT fill
   UI_COL_OFF_TEXT = 0x9a9a9a;
   UI_COL_ID_TEXT = 0x8a8a8a;
   UI_COL_STATUS_BLUE = 0x6db33f;
