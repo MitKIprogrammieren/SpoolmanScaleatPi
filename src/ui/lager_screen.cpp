@@ -38,7 +38,15 @@ void resetActivityTimer();
 
 namespace {
 
+// One AMS slot the kind sits in, as the card matches it (Bambu id + colour).
+struct Place {
+  std::string printer, slot, ams;
+  int hum = -1;        // % or -1
+  char hum_col = 0;    // 'g', 'o', 'r'
+};
+
 struct Entry {
+  std::vector<Place> places;
   std::string name, vendor, material, family;
   std::vector<std::string> features;
   uint32_t color = 0x888888;
@@ -46,9 +54,13 @@ struct Entry {
   std::vector<int> rests;
 };
 
-enum Sort { S_MATERIAL, S_MARKE, S_FARBE, S_ART, S_BESTAND, S_COUNT };
-const char* const kSortName[S_COUNT] = { "Material", "Marke", "Farbe", "Besonderheit", "Bestand" };
-const int kSortW[S_COUNT] = { 74, 64, 58, 104, 70 };
+// Stored as a number: Drucker was added after Bestand, so the order of the
+// buttons (the card's) and the stored values differ.
+enum Sort { S_MATERIAL, S_MARKE, S_FARBE, S_ART, S_BESTAND, S_DRUCKER, S_COUNT };
+const int kSortOrder[S_COUNT] = { S_MATERIAL, S_MARKE, S_FARBE, S_ART, S_DRUCKER, S_BESTAND };
+const char* const kSortName[S_COUNT] = { "Material", "Marke", "Farbe", "Besonderheit", "Bestand", "Drucker" };
+const int kSortW[S_COUNT] = { 72, 62, 56, 100, 72, 70 };
+const char* const kNotInAms = "Nicht im AMS";
 const char* const kFamilies[] = { "Schwarz", "Grau", "Weiß", "Braun", "Rot", "Orange",
                                   "Gelb", "Grün", "Blau", "Lila", "Pink" };
 #define PREF_SORT "lager_sort"
@@ -116,13 +128,78 @@ int load(std::string& err) {
     e.family = ff[0] | "Grau";
     e.hue = ff[1] | 0;
     e.light = ff[2] | 0;
+    for (JsonObjectConst a : o["a"].as<JsonArrayConst>()) {
+      Place pl;
+      pl.printer = a["d"] | "";
+      pl.slot = a["p"] | "";
+      pl.ams = a["m"] | "";
+      pl.hum = a["h"].is<int>() ? (int)a["h"] : -1;
+      const char* hc = a["hc"] | "";
+      pl.hum_col = hc[0];
+      e.places.push_back(std::move(pl));
+    }
     s_items.push_back(std::move(e));
   }
   return code;
 }
 
+struct Item {
+  const Entry* e;
+  const Place* place;   // Drucker sorting: the slot this copy stands for
+};
+using Group = std::pair<std::string, std::vector<Item>>;
+
+// "X1C 2" before "X1C 10", the way localeCompare(..., {numeric: true}) sorts.
+bool natLess(const std::string& a, const std::string& b) {
+  size_t i = 0, j = 0;
+  while (i < a.size() && j < b.size()) {
+    if (isdigit((unsigned char)a[i]) && isdigit((unsigned char)b[j])) {
+      long x = 0, y = 0;
+      while (i < a.size() && isdigit((unsigned char)a[i])) x = x * 10 + (a[i++] - '0');
+      while (j < b.size() && isdigit((unsigned char)b[j])) y = y * 10 + (b[j++] - '0');
+      if (x != y) return x < y;
+    } else {
+      const char ca = (char)tolower((unsigned char)a[i++]), cb = (char)tolower((unsigned char)b[j++]);
+      if (ca != cb) return ca < cb;
+    }
+  }
+  return a.size() - i < b.size() - j;
+}
+
+// The card's "Nach Drucker": a kind in an AMS under each printer it is in
+// (once per printer and AMS), ordered by slot; everything else under "Nicht im AMS".
+std::vector<Group> groupByPrinter() {
+  std::map<std::string, std::vector<Item>> g;
+  for (const Entry& e : s_items) {
+    if (e.spools <= 0 && !s_show_empty) continue;
+    if (e.places.empty()) { g[kNotInAms].push_back({&e, nullptr}); continue; }
+    std::vector<std::string> seen;
+    for (const Place& p : e.places) {
+      const std::string key = p.printer + "|" + p.ams;
+      if (std::find(seen.begin(), seen.end(), key) != seen.end()) continue;
+      seen.push_back(key);
+      g[p.printer].push_back({&e, &p});
+    }
+  }
+  std::vector<Group> out;
+  for (auto& kv : g)
+    if (kv.first != kNotInAms) out.emplace_back(kv.first, kv.second);
+  std::sort(out.begin(), out.end(), [](const Group& a, const Group& b) { return natLess(a.first, b.first); });
+  for (auto& grp : out)
+    std::sort(grp.second.begin(), grp.second.end(), [](const Item& a, const Item& b) {
+      if (a.place->slot != b.place->slot) return natLess(a.place->slot, b.place->slot);
+      return nameLess(a.e, b.e); });
+  if (g.count(kNotInAms)) {
+    auto rest = g[kNotInAms];
+    std::sort(rest.begin(), rest.end(), [](const Item& a, const Item& b) { return nameLess(a.e, b.e); });
+    out.emplace_back(kNotInAms, rest);
+  }
+  return out;
+}
+
 // Groups and their order, as the card's _gruppen() builds them.
-std::vector<std::pair<std::string, std::vector<const Entry*>>> groupItems() {
+std::vector<Group> groupItems() {
+  if (s_sort == S_DRUCKER) return groupByPrinter();
   std::map<std::string, std::vector<const Entry*>> g;
   for (const Entry& e : s_items) {
     if (e.spools <= 0 && !s_show_empty) continue;
@@ -136,7 +213,8 @@ std::vector<std::pair<std::string, std::vector<const Entry*>>> groupItems() {
     }
     g[key].push_back(&e);
   }
-  std::vector<std::pair<std::string, std::vector<const Entry*>>> out;
+  std::vector<std::pair<std::string, std::vector<const Entry*>>> sorted;
+  auto& out = sorted;
   if (s_sort == S_FARBE) {
     for (const char* f : kFamilies)
       if (g.count(f)) out.emplace_back(f, g[f]);
@@ -172,7 +250,13 @@ std::vector<std::pair<std::string, std::vector<const Entry*>>> groupItems() {
         break;
     }
   }
-  return out;
+  std::vector<Group> res;
+  for (auto& grp : sorted) {
+    std::vector<Item> items;
+    for (const Entry* e : grp.second) items.push_back({e, nullptr});
+    res.emplace_back(grp.first, std::move(items));
+  }
+  return res;
 }
 
 // ---- drawing -----------------------------------------------------------------
@@ -221,7 +305,11 @@ void featureColours(const std::string& f, uint32_t* fg, uint32_t* bg) {
   }
 }
 
-void addRow(lv_obj_t* grp, const Entry& e, bool last) {
+uint32_t humColour(char c) {
+  return c == 'g' ? 0x4caf50 : c == 'o' ? 0xffa726 : c == 'r' ? 0xef5350 : UI_COL_CAPTION;
+}
+
+void addRow(lv_obj_t* grp, const Entry& e, const Place* in_slot, bool last) {
   lv_obj_t* row = plain(grp);
   lv_obj_set_size(row, LV_PCT(100), 58);
   if (!last) {
@@ -281,6 +369,18 @@ void addRow(lv_obj_t* grp, const Entry& e, bool last) {
     }
   }
 
+  // Where it sits in an AMS. Sorted by printer the heading names printer and
+  // AMS already, so the chip carries the slot alone.
+  if (in_slot) {
+    chip(chips, in_slot->slot.c_str(), 0x4caf50, 0x1e3a20, false);
+  } else {
+    for (const Place& p : e.places) {
+      std::string t = p.printer + " " + p.slot;
+      if (p.hum >= 0) t += "  " + std::to_string(p.hum) + " %";
+      chip(chips, t.c_str(), 0x4caf50, 0x1e3a20, false);
+    }
+  }
+
   // stock and bar on the right
   char kg[16];
   fmtWeight(kg, sizeof(kg), e.grams);
@@ -331,7 +431,11 @@ void fillList() {
   const auto groups = groupItems();
   for (const auto& grp : groups) {
     int g = 0;
-    for (const Entry* e : grp.second) g += e->grams;
+    int slots = 0;
+    for (const Item& it : grp.second) {
+      g += it.e->grams;
+      if (it.place) slots++;
+    }
 
     lv_obj_t* head = plain(s_list);
     lv_obj_set_size(head, LV_PCT(100), 22);
@@ -342,10 +446,12 @@ void fillList() {
     lv_obj_set_style_text_color(hl, lv_color_hex(UI_COL_CAPTION), 0);
     lv_obj_set_style_text_font(hl, &lv_font_montserrat_ext_12, 0);
     lv_obj_align(hl, LV_ALIGN_BOTTOM_LEFT, 6, -2);
-    char kg[16];
+    char kg[16], right[40];
     fmtWeight(kg, sizeof(kg), g);
+    if (slots) snprintf(right, sizeof(right), "%d %s | %s", slots, slots == 1 ? "Platz" : "Plätze", kg);
+    else snprintf(right, sizeof(right), "%s", kg);
     lv_obj_t* hr = lv_label_create(head);
-    lv_label_set_text(hr, kg);
+    lv_label_set_text(hr, right);
     lv_obj_set_style_text_color(hr, lv_color_hex(UI_COL_CAPTION), 0);
     lv_obj_set_style_text_font(hr, &lv_font_montserrat_ext_12, 0);
     lv_obj_align(hr, LV_ALIGN_BOTTOM_RIGHT, -6, -2);
@@ -358,8 +464,36 @@ void fillList() {
     lv_obj_set_style_radius(card, 14, 0);
     lv_obj_set_style_pad_hor(card, 10, 0);
     lv_obj_set_flex_flow(card, LV_FLEX_FLOW_COLUMN);
-    for (size_t i = 0; i < grp.second.size(); i++)
-      addRow(card, *grp.second[i], i + 1 == grp.second.size());
+    std::string last_ams;
+    for (size_t i = 0; i < grp.second.size(); i++) {
+      const Item& it = grp.second[i];
+      // Sub heading per AMS, with its humidity, as the card has it.
+      if (it.place && it.place->ams != last_ams) {
+        last_ams = it.place->ams;
+        lv_obj_t* sh = plain(card);
+        lv_obj_set_size(sh, LV_PCT(100), 22);
+        lv_obj_set_style_border_side(sh, LV_BORDER_SIDE_BOTTOM, 0);
+        lv_obj_set_style_border_width(sh, 1, 0);
+        lv_obj_set_style_border_color(sh, lv_color_hex(UI_COL_DIVIDER), 0);
+        std::string t = it.place->ams;
+        for (char& c : t) c = (char)toupper((unsigned char)c);
+        lv_obj_t* sl = lv_label_create(sh);
+        lv_label_set_text(sl, t.c_str());
+        lv_obj_set_style_text_color(sl, lv_color_hex(UI_COL_CAPTION), 0);
+        lv_obj_set_style_text_font(sl, &lv_font_montserrat_ext_10, 0);
+        lv_obj_align(sl, LV_ALIGN_BOTTOM_LEFT, 0, -3);
+        if (it.place->hum >= 0) {
+          char hb[16];
+          snprintf(hb, sizeof(hb), "%d %%", it.place->hum);
+          lv_obj_t* hl2 = lv_label_create(sh);
+          lv_label_set_text(hl2, hb);
+          lv_obj_set_style_text_color(hl2, lv_color_hex(humColour(it.place->hum_col)), 0);
+          lv_obj_set_style_text_font(hl2, &lv_font_montserrat_ext_10, 0);
+          lv_obj_align(hl2, LV_ALIGN_BOTTOM_RIGHT, 0, -3);
+        }
+      }
+      addRow(card, *it.e, it.place, i + 1 == grp.second.size());
+    }
   }
 
   // the header line: total, kinds, rolls (with spool / refill), over everything
@@ -373,7 +507,7 @@ void fillList() {
   }
   char kg[16], buf[120];
   fmtWeight(kg, sizeof(kg), grams);
-  snprintf(buf, sizeof(buf), "#4caf50 %s#  |  %d Sorten  |  %d Rollen (%d mit Spule, %d Refill)",
+  snprintf(buf, sizeof(buf), "#4caf50 %s# | %d Sorten | %d Rollen (%d mit Spule, %d Refill)",
            kg, kinds, rolls, rolls - refills, refills);
   lv_label_set_text(s_summary, buf);
   if (s_empty_btn) {
@@ -389,11 +523,11 @@ void fillList() {
   paintSortBar();
 }
 
-lv_obj_t* pill(int x, int w, const char* text, lv_event_cb_t cb, void* ud) {
+lv_obj_t* pill(int x, int y, int w, int h, const char* text, lv_event_cb_t cb, void* ud) {
   lv_obj_t* c = lv_btn_create(s_scr);
-  lv_obj_set_size(c, w, 28);
-  lv_obj_set_pos(c, x, 70);
-  lv_obj_set_style_radius(c, 14, 0);
+  lv_obj_set_size(c, w, h);
+  lv_obj_set_pos(c, x, y);
+  lv_obj_set_style_radius(c, h / 2, 0);
   lv_obj_set_style_border_width(c, 1, 0);
   lv_obj_set_style_shadow_width(c, 0, 0);
   lv_obj_set_style_pad_all(c, 0, 0);
@@ -426,19 +560,22 @@ void build() {
   lv_obj_set_style_text_color(s_summary, lv_color_hex(UI_COL_INK_SOFT), 0);
   lv_obj_set_style_text_font(s_summary, &lv_font_montserrat_ext_12, 0);
   lv_obj_set_pos(s_summary, 10, 50);
+  lv_label_set_long_mode(s_summary, LV_LABEL_LONG_DOT);
+  lv_obj_set_width(s_summary, 380);
 
   int x = 8;
-  for (int i = 0; i < S_COUNT; i++) {
-    s_sort_btn[i] = pill(x, kSortW[i], kSortName[i], [](lv_event_t* e) {
+  for (int n = 0; n < S_COUNT; n++) {
+    const int i = kSortOrder[n];
+    s_sort_btn[i] = pill(x, 70, kSortW[i], 28, kSortName[i], [](lv_event_t* e) {
       s_sort = (int)(intptr_t)lv_event_get_user_data(e);
       prefsPutUChar(PREF_SORT, (uint8_t)s_sort);
       logSDf("BTN: Lager -> sort %s", kSortName[s_sort]);
       fillList();
       resetActivityTimer();
     }, (void*)(intptr_t)i);
-    x += kSortW[i] + 4;
+    x += kSortW[i] + 6;
   }
-  s_empty_btn = pill(x, 472 - x, "Leer", [](lv_event_t*) {
+  s_empty_btn = pill(392, 45, 80, 22, "Leer", [](lv_event_t*) {
     s_show_empty = !s_show_empty;
     prefsPutUChar(PREF_EMPTY, s_show_empty ? 1 : 0);
     logSDf("BTN: Lager -> empty %s", s_show_empty ? "shown" : "hidden");

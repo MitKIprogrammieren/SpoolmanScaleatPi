@@ -238,6 +238,32 @@ class HomeAssistant:
             self.last_error = ""
             return items
 
+    AMS_TEMPLATE = (
+        "{% set ns = namespace(l=[], n={}) %}"
+        "{% for s in states.sensor if s.entity_id is search('_(ams_\\d+_slot_\\d+|externalspool\\d*_externe_spule)$')"
+        " or s.entity_id is search('_ams_\\d+_luftfeuchtigkeit(_\\d+)?$') %}"
+        "{% set a = s.attributes %}"
+        "{% set ns.l = ns.l + [{'e': s.entity_id, 's': s.state, 'name': a.get('name'), 'color': a.get('color'),"
+        " 'fid': a.get('filament_id'), 'empty': a.get('empty')}] %}{% endfor %}"
+        "{% for s in states.sensor if s.entity_id is search('^sensor\\.[^_]+_[^_]+_druckstatus$') %}"
+        "{% set ns.n = dict(ns.n, **{s.entity_id[7:-12]: device_attr(device_id(s.entity_id), 'name_by_user') or ''}) %}"
+        "{% endfor %}"
+        "{{ {'slots': ns.l, 'names': ns.n, 'grenze': states('input_number.silica_warnschwelle')} | to_json }}")
+
+    def ams(self):
+        """Slots, printer names and the silica threshold in one template render."""
+        c = self.cfg()
+        req = urllib.request.Request(c["url"] + "/api/template", method="POST",
+                                     data=json.dumps({"template": self.AMS_TEMPLATE}).encode(),
+                                     headers={"Authorization": "Bearer " + c["token"],
+                                              "Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=10) as r:
+                return json.loads(r.read().decode())
+        except Exception as e:      # the stock list works without it
+            log("AMS read failed:", e)
+            return None
+
     def update(self, uid, d):
         self.call("update_item", {"item": uid, "description": json.dumps(d, ensure_ascii=False,
                                                                          separators=(",", ":"))})
@@ -286,6 +312,95 @@ def color_family(hexcol):
     else:
         f = "Pink"
     return [f, int(hue), int(l * 100)]
+
+
+AMS_SLOT_RE = re.compile(r"_(ams_\d+_slot_\d+|externalspool\d*_externe_spule)$")
+AMS_SLOT_NR_RE = re.compile(r"_ams_(\d+)_slot_(\d+)$")
+AMS_HUM_RE = re.compile(r"^sensor\.([^_]+_[^_]+)_ams_(\d+)_luftfeuchtigkeit(_\d+)?$")
+
+
+def ams_name(nr):
+    return "AMS HT %d" % (nr - 127) if nr >= 128 else "AMS " + ("ABCDEFGH"[nr - 1] if 1 <= nr <= 8 else str(nr))
+
+
+def ams_platz(nr, fach):
+    return "HT%d" % (nr - 127) if nr >= 128 else ("ABCDEFGH"[nr - 1] if 1 <= nr <= 8 else "%d-" % nr) + str(fach)
+
+
+def color_distance(a, b):
+    def rgb(x):
+        x = str(x or "").lstrip("#")[:6]
+        try:
+            return [int(x[i:i + 2], 16) for i in (0, 2, 4)]
+        except ValueError:
+            return [136, 136, 136]
+    return sum((p - q) ** 2 for p, q in zip(rgb(a), rgb(b)))
+
+
+def ams_placement(data, items):
+    """Which kind sits in which AMS slot, the way the card works it out:
+    same Bambu id, the nearest colour among several. {ha uid: [place, ...]}"""
+    if not data:
+        return {}
+    names = data.get("names") or {}
+    try:
+        grenze = round(float(data.get("grenze")))
+        grenze = grenze if grenze > 0 else 35
+    except (TypeError, ValueError):
+        grenze = 35
+    models = {"h2c": "H2C", "h2s": "H2S", "p1s": "P1S", "a1mini": "A1 Mini"}
+    model = lambda p: models.get(p.split("_")[0], p.split("_")[0].upper())
+    same = {}
+    for p in sorted(names):
+        same.setdefault(model(p), []).append(p)
+
+    def printer(p):
+        if names.get(p):
+            return names[p]
+        m, a = model(p), same.get(model(p), [])
+        return "%s %d" % (m, a.index(p) + 1) if len(a) > 1 and p in a else m
+
+    hum = {}
+    for s in data.get("slots") or []:
+        m = AMS_HUM_RE.match(s["e"])
+        if m:
+            try:
+                hum[m.group(1) + "_ams_" + str(int(m.group(2)))] = float(s["s"])
+            except (TypeError, ValueError):
+                pass
+    kinds = [it for it in items if it["d"].get("bambu_id") and int(it["d"].get("spulen") or 0) > 0]
+    out = {}
+    for s in data.get("slots") or []:
+        e = s["e"]
+        if not AMS_SLOT_RE.search(e):
+            continue
+        if str(s.get("s", "")).lower() in ("unavailable", "unknown", "", "empty", "leer") or s.get("empty") is True:
+            continue
+        fid = str(s.get("fid") or "")
+        if not fid:
+            continue
+        pref = "_".join(e[7:].split("_")[:2])
+        m = AMS_SLOT_NR_RE.search(e)
+        if m:
+            nr = int(m.group(1))
+            platz, ams = ams_platz(nr, m.group(2)), ams_name(nr)
+            h = hum.get(pref + "_ams_" + str(nr))
+        else:
+            platz = ams = "Externe Spule"
+            h = None
+        best, bd = None, float("inf")
+        for it in kinds:
+            if it["d"].get("bambu_id") != fid:
+                continue
+            dd = color_distance(it["d"].get("hex"), str(s.get("color") or "")[:7])
+            if dd < bd:
+                best, bd = it, dd
+        if best is None or bd > 19200:
+            continue
+        hc = None if h is None else ("g" if h < 20 else "o" if h < grenze else "r")
+        out.setdefault(best["uid"], []).append(
+            {"d": printer(pref), "p": platz, "m": ams, "h": None if h is None else int(round(h)), "hc": hc})
+    return out
 
 
 def gw_of(d):
@@ -474,7 +589,9 @@ class Bridge:
         """The whole stock in one compact answer, for the scale's Lager screen:
         sorted by manufacturer, material, name; grams as the card counts them."""
         out = []
-        for it in self.items():
+        items = self.items()
+        placed = ams_placement(self.ha.ams(), items)
+        for it in items:
             d = it["d"]
             gw = gw_of(d)
             sp = int(d.get("spulen") or 0)
@@ -493,6 +610,7 @@ class Bridge:
                 "b": [str(x) for x in (d.get("besonderheiten") or [])],
                 "f": max(0, min(int(d.get("refills") or 0), max(sp, 0))),
                 "ff": color_family(d.get("hex")),
+                "a": placed.get(it["uid"], []),
             })
         out.sort(key=lambda e: (e["v"].lower(), e["m"].lower(), e["n"].lower()))
         return out
