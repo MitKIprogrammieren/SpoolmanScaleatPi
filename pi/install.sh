@@ -16,9 +16,15 @@ fi
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD="$REPO/build-pi"
 
-echo "== Pakete"
-apt-get update
-apt-get install -y build-essential cmake git pkg-config libcurl4-openssl-dev i2c-tools avahi-utils python3
+PKGS="build-essential cmake git pkg-config libcurl4-openssl-dev i2c-tools avahi-utils python3"
+# Only when something is missing: apt-get update alone takes a minute.
+if dpkg -s $PKGS >/dev/null 2>&1; then
+  echo "== Pakete: alles da"
+else
+  echo "== Pakete"
+  apt-get update
+  apt-get install -y $PKGS
+fi
 
 echo "== I2C und serielle Schnittstelle einschalten"
 if command -v raspi-config >/dev/null; then
