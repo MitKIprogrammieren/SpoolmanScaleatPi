@@ -45,7 +45,9 @@ bool s_need_wake = true;
 
 // ---- UART --------------------------------------------------------------------
 bool uartOpen() {
-  s_fd = open(s_dev.c_str(), O_RDWR | O_NOCTTY | O_CLOEXEC);
+  // O_NONBLOCK: without it, opening a serial port can wait for a carrier
+  // signal that a PN532 never raises. Reads use poll() anyway.
+  s_fd = open(s_dev.c_str(), O_RDWR | O_NOCTTY | O_NONBLOCK | O_CLOEXEC);
   if (s_fd < 0) {
     fprintf(stderr, "PN532: cannot open %s (%s)\n", s_dev.c_str(), strerror(errno));
     return false;
@@ -61,6 +63,7 @@ bool uartOpen() {
   t.c_cc[VTIME] = 0;
   tcsetattr(s_fd, TCSANOW, &t);
   tcflush(s_fd, TCIOFLUSH);
+  fprintf(stderr, "PN532: using %s\n", s_dev.c_str());
   return true;
 }
 
@@ -68,10 +71,17 @@ bool uartWrite(const uint8_t* b, size_t n) {
   size_t done = 0;
   while (done < n) {
     ssize_t w = write(s_fd, b + done, n - done);
-    if (w < 0) { if (errno == EINTR) continue; return false; }
+    if (w < 0) {
+      if (errno == EINTR) continue;
+      if (errno == EAGAIN) {
+        struct pollfd p = {s_fd, POLLOUT, 0};
+        if (poll(&p, 1, 100) != 1) return false;
+        continue;
+      }
+      return false;
+    }
     done += (size_t)w;
   }
-  tcdrain(s_fd);
   return true;
 }
 

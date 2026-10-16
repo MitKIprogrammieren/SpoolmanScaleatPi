@@ -28,6 +28,11 @@ void crumbSet(const char* where) {
   s_uptime_ms = millis();
 }
 
+#ifdef SPOOLMANSCALE_PI
+// The Pi's stall watchdog (pi/main_pi.cpp) names where the loop is waiting.
+const char* crumbCurrent() { return s_crumb; }
+#endif
+
 void crumbBegin() {
   if (s_magic == CRUMB_MAGIC) {
     // A truncated write cannot terminate the string, and a corrupted cell
