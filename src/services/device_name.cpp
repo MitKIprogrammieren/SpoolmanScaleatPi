@@ -11,6 +11,9 @@
 #include "app/app_state.h"
 #include "hardware/sd_logger.h"
 #include "services/mdns_service.h"
+#ifdef SPOOLMANSCALE_PI
+#include "pi_platform.h"
+#endif
 #include "services/prefs_store.h"
 #include "services/wifi_manager.h"
 
@@ -113,7 +116,12 @@ static void rebuildFqdn() {
 }
 
 void deviceNameLoad() {
+#ifdef SPOOLMANSCALE_PI
+  // avahi announces the Pi under its own host name; the scale shows that one.
+  String stored = prefsGetString("mdns_host", piDefaultDeviceLabel());
+#else
   String stored = prefsGetString("mdns_host", DEVICE_LABEL_DEFAULT);
+#endif
   char buf[DEVICE_LABEL_MAX + 1];
   // A stored name that no longer validates falls back rather than leaving the
   // device unreachable by name - the only way to get one in is through the

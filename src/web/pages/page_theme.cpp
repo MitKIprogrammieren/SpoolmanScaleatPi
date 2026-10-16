@@ -4,6 +4,7 @@
 // palette with a restart, because LVGL copies a colour into an object when
 // the object is made.
 #include "web/web_pages.h"
+#include "product_name.h"
 
 #include <Arduino.h>
 #include <WebServer.h>
@@ -248,7 +249,7 @@ static String body() {
          "function esc(s){return String(s).replace(/[&<>]/g,function(c){"
          "return{'&':'&amp;','<':'&lt;','>':'&gt;'}[c];});}"
          "function mockMain(){return '<div class=\"tm\"><div class=\"tm-hdr\">"
-         "<span>SpoolmanScale</span><span class=\"tm-chip\">NFC</span></div>"
+         "<span>" FW_PRODUCT_NAME "</span><span class=\"tm-chip\">NFC</span></div>"
          "<div class=\"tm-st\">&#9679; '+esc(TT.tag)+'</div>"
          "<div class=\"tm-row\"><i class=\"tm-sw\"></i>"
          "<div><small>'+esc(TT.material)+'</small><b>PLA</b></div>"

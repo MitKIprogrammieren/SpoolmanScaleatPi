@@ -1,4 +1,5 @@
 #include "services/mdns_service.h"
+#include "product_name.h"
 
 #include <Arduino.h>
 #include <ESPmDNS.h>
@@ -82,7 +83,7 @@ void mdnsSyncState() {
     }
     // The instance name is what a browser shows in a device list, so it is
     // the product name rather than the host label.
-    MDNS.setInstanceName("SpoolmanScale");
+    MDNS.setInstanceName(FW_PRODUCT_NAME);
     s_running = true;
     strncpy(s_advertised, deviceLabel(), sizeof(s_advertised) - 1);
     s_advertised[sizeof(s_advertised) - 1] = '\0';

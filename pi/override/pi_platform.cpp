@@ -25,3 +25,15 @@ void piAdoptOsNetwork() {
   if (cfg_first_boot) cfg_setup_resume = true;
   Serial.printf("Pi: using the OS network (%s)\n", cfg_wifi_ssid);
 }
+
+const char* piDefaultDeviceLabel() {
+  static char name[64] = "";
+  if (!name[0]) {
+    if (gethostname(name, sizeof(name) - 1) != 0 || !name[0]) snprintf(name, sizeof(name), "filamentlager");
+    for (char* c = name; *c; c++) {
+      *c = (char)tolower((unsigned char)*c);
+      if (*c == '.') { *c = 0; break; }
+    }
+  }
+  return name;
+}

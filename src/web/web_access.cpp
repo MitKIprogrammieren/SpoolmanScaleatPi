@@ -1,4 +1,5 @@
 #include "web/web_access.h"
+#include "product_name.h"
 
 #include "services/ota_state.h"
 
@@ -309,7 +310,7 @@ bool webRequire(WebServer &srv, WebGate g, const char *what) {
       // body is what shows behind that prompt, and for a moment after a
       // cancelled one - a page in the device's own style rather than a bare
       // sentence on white.
-      srv.sendHeader("WWW-Authenticate", "Basic realm=\"SpoolmanScale\"");
+      srv.sendHeader("WWW-Authenticate", "Basic realm=\"" FW_PRODUCT_NAME "\"");
       if (api) {
         srv.send(401, "text/plain; charset=utf-8", T(STR_W_AUTH_NEEDED));
       } else {
@@ -335,7 +336,7 @@ static void sendTinyPage(WebServer &srv, int code, const char *title, const Stri
   h += F("<head><meta charset='utf-8'>"
          "<meta name='viewport' content='width=device-width,initial-scale=1'>"
          "<link rel='icon' type='image/png' href='/favicon.png'>"
-         "<title>SpoolmanScale</title>");
+         "<title>" FW_PRODUCT_NAME "</title>");
   h += webShellAssets();
   h += F("<style>"
          "body{justify-content:center;padding:32px 16px;text-align:center}"

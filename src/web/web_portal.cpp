@@ -1,4 +1,5 @@
 #include "web/web_portal.h"
+#include "product_name.h"
 
 #include <Arduino.h>
 #include <WebServer.h>
@@ -37,9 +38,9 @@ static String pageStart() {
   h += (g_lang == LANG_DE) ? "de" : (g_lang == LANG_FR) ? "fr" : "en";
   h += F("'><head><meta charset='utf-8'>"
          "<meta name='viewport' content='width=device-width,initial-scale=1'>"
-         "<title>SpoolmanScale</title><style>");
+         "<title>" FW_PRODUCT_NAME "</title><style>");
   h += FPSTR(PORTAL_CSS);
-  h += F("</style></head><body><main><h1>SpoolmanScale</h1>");
+  h += F("</style></head><body><main><h1>" FW_PRODUCT_NAME "</h1>");
   return h;
 }
 

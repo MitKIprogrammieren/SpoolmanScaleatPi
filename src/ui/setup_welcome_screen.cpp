@@ -1,4 +1,5 @@
 #include "setup_welcome_screen.h"
+#include "product_name.h"
 #include "navigation.h"
 #include "app/app_state.h"
 #include "app/deferred_actions.h"
@@ -90,7 +91,7 @@ void buildWelcomeScreen() {
   }
 
   lv_obj_t *lbl_logo = lv_label_create(scr_welcome);
-  lv_label_set_text(lbl_logo, "SpoolmanScale");
+  lv_label_set_text(lbl_logo, FW_PRODUCT_NAME);
   lv_obj_set_style_text_color(lbl_logo, lv_color_hex(UI_COL_ACCENT), 0);
   lv_obj_set_style_text_font(lbl_logo, &lv_font_montserrat_ext_24, 0);
   lv_obj_align(lbl_logo, LV_ALIGN_TOP_MID, 0, 12);
@@ -302,7 +303,7 @@ void buildFirstBootScreen() {
   lv_obj_set_style_bg_color(scr_first_boot, lv_color_hex(UI_COL_GROUND), 0);
 
   lv_obj_t *lbl_logo = lv_label_create(scr_first_boot);
-  lv_label_set_text(lbl_logo, "SpoolmanScale");
+  lv_label_set_text(lbl_logo, FW_PRODUCT_NAME);
   lv_obj_set_style_text_color(lbl_logo, lv_color_hex(UI_COL_ACCENT), 0);
   lv_obj_set_style_text_font(lbl_logo, &lv_font_montserrat_ext_24, 0);
   lv_obj_align(lbl_logo, LV_ALIGN_TOP_MID, 0, 32);

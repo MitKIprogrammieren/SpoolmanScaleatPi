@@ -1,4 +1,5 @@
 #include "web/web_shell.h"
+#include "product_name.h"
 
 #include <string.h>
 
@@ -149,7 +150,7 @@ String webShellHead(const char *subtitle) {
       "<meta name='viewport' content='width=device-width,initial-scale=1'>"
       "<link rel='icon' type='image/png' href='/favicon.png'>"
       "<link rel='apple-touch-icon' href='/apple-touch-icon.png'>"
-      "<title>SpoolmanScale - ");
+      "<title>" FW_PRODUCT_NAME " - ");
   h += subtitle;
   h += F("</title>");
   h += webShellAssets();
@@ -164,8 +165,8 @@ String webShellHead(const char *subtitle) {
 String webShellHeader() {
   String h;
   h += F("<div class='head'><div class='mark'>"
-         "<img src='/logo.jpg' width='52' height='52' alt='SpoolmanScale'></div><div>"
-         "<div class='wordmark'>Spoolman<span>Scale</span></div>"
+         "<img src='/logo.jpg' width='52' height='52' alt='" FW_PRODUCT_NAME "'></div><div>"
+         "<div class='wordmark'>" FW_PRODUCT_NAME_1 "<span>" FW_PRODUCT_NAME_2 "</span></div>"
          "<div class='subline'>");
   h += FW_VERSION;
   h += F(" &nbsp;&middot;&nbsp; ESP32-S3</div></div>");

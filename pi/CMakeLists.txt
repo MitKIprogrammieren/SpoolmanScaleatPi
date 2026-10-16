@@ -92,7 +92,9 @@ target_compile_definitions(spoolmanscale PRIVATE
   SPOOLMANSCALE_PI=1
   ARDUINO=10819
   ARDUINOJSON_ENABLE_PROGMEM=0
-  FW_PLATFORM_PI=1)
+  FW_PLATFORM_PI=1
+  FW_PRODUCT_NAME_1="Filament"
+  FW_PRODUCT_NAME_2="Lager")
 target_compile_options(spoolmanscale PRIVATE
   -Wno-unused-parameter -Wno-unused-variable -Wno-unused-function
   $<$<COMPILE_LANGUAGE:CXX>:-Wno-deprecated-declarations>)

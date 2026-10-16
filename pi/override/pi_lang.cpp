@@ -3,6 +3,13 @@
 // 8-pin I/O connector.
 #include "lang.h"
 
+#include <cstring>
+#include <map>
+#include <mutex>
+#include <string>
+
+#include "product_name.h"
+
 namespace {
 struct PiText {
   int id;
@@ -57,9 +64,28 @@ const PiText kTexts[] = {
 };
 }  // namespace
 
+namespace {
+// Every other text that names the product gets the Pi build's name instead,
+// worked out once per text and language and kept.
+const char* withProductName(int id, int lang) {
+  const char* orig = STRINGS[id][lang] ? STRINGS[id][lang] : STRINGS[id][LANG_EN];
+  if (!orig || !strstr(orig, "SpoolmanScale")) return nullptr;
+  static std::mutex mu;
+  static std::map<int, std::string> cache;
+  std::lock_guard<std::mutex> lk(mu);
+  const int key = id * 4 + lang;
+  auto it = cache.find(key);
+  if (it != cache.end()) return it->second.c_str();
+  std::string out = orig;
+  size_t p;
+  while ((p = out.find("SpoolmanScale")) != std::string::npos) out.replace(p, 13, FW_PRODUCT_NAME);
+  return cache.emplace(key, out).first->second.c_str();
+}
+}  // namespace
+
 const char* piLangText(int id, int lang) {
   if (lang < 0 || lang > 2) lang = 1;
   for (const PiText& t : kTexts)
     if (t.id == id) return t.text[lang];
-  return nullptr;
+  return withProductName(id, lang);
 }

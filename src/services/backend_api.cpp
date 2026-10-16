@@ -1,4 +1,5 @@
 #include "backend_api.h"
+#include "product_name.h"
 
 #include <ctype.h>
 #include <esp_mac.h>
@@ -369,7 +370,7 @@ int backendTagScan(const char* base_url, const char* uid, const char* alt_uid,
     const char* fm_name = deviceLabel();
     return filamanTagScan(backendBaseUrl(), filamanDeviceToken(), uid, alt_uid,
                           backendReaderId(),
-                          (fm_name && fm_name[0]) ? fm_name : "SpoolmanScale",
+                          (fm_name && fm_name[0]) ? fm_name : FW_PRODUCT_NAME,
                           format, doc, timeout_ms, out_err);
   }
   if (!backendHasNativeTags()) return notSupported("TagScan");
@@ -379,7 +380,7 @@ int backendTagScan(const char* base_url, const char* uid, const char* alt_uid,
   // deviceLabel() is never empty and falls back to the product name itself.
   const char* name = deviceLabel();
   return spoolmanTagScan(base_url, uid, backendReaderId(),
-                         (name && name[0]) ? name : "SpoolmanScale",
+                         (name && name[0]) ? name : FW_PRODUCT_NAME,
                          format, doc, timeout_ms, out_err);
 }
 
