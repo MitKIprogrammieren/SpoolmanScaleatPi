@@ -65,11 +65,11 @@ backup() {
   local name="filamentlager-$(hostname)-$(date +%Y-%m-%d_%H%M).tar.gz"
   local items=()
   for p in /var/lib/spoolmanscale /etc/filamentlager /etc/default/spoolmanscale; do
-    [ -e "$p" ] && items+=("$p")
+    [ -e "$p" ] && items+=("${p#/}")
   done
   # The bridge's credential files belong in it (a restore needs them), the
   # backup's own share password does not.
-  tar --exclude="$CRED" -czf "$MNT/$FOLDER/$name" "${items[@]}" 2>/dev/null
+  tar -C / --exclude="${CRED#/}" -czf "$MNT/$FOLDER/$name" "${items[@]}"
   echo "Backup: //$SERVER/$SHARE/$FOLDER/$name ($(du -h "$MNT/$FOLDER/$name" | cut -f1))"
   # keep the newest KEEP
   ls -1t "$MNT/$FOLDER"/filamentlager-"$(hostname)"-*.tar.gz 2>/dev/null | tail -n +$((KEEP + 1)) | while read -r old; do
