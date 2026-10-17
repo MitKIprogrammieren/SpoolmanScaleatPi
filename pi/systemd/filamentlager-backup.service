@@ -1,0 +1,8 @@
+[Unit]
+Description=FilamentLager backup to the network share
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/filamentlager-backup

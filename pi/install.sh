@@ -16,7 +16,7 @@ fi
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD="$REPO/build-pi"
 
-PKGS="build-essential cmake git pkg-config libcurl4-openssl-dev i2c-tools avahi-utils python3"
+PKGS="build-essential cmake git pkg-config libcurl4-openssl-dev i2c-tools avahi-utils python3 cifs-utils"
 # Only when something is missing: apt-get update alone takes a minute.
 if dpkg -s $PKGS >/dev/null 2>&1; then
   echo "== Pakete: alles da"
@@ -45,19 +45,27 @@ install -m 0644 "$REPO/pi/systemd/spoolmanscale.service" /etc/systemd/system/spo
 # Home Assistant FilamentLager bridge (python3, standard library only)
 install -m 0755 "$REPO/pi/ha_bridge/filamentlager_ha_bridge.py" /usr/local/bin/filamentlager-ha-bridge
 install -m 0644 "$REPO/pi/systemd/filamentlager-ha-bridge.service" /etc/systemd/system/filamentlager-ha-bridge.service
+# Daily backup to the Synology (configured with filamentlager-backup --setup)
+install -m 0755 "$REPO/pi/backup/filamentlager-backup" /usr/local/bin/filamentlager-backup
+install -m 0644 "$REPO/pi/systemd/filamentlager-backup.service" /etc/systemd/system/filamentlager-backup.service
+install -m 0644 "$REPO/pi/systemd/filamentlager-backup.timer" /etc/systemd/system/filamentlager-backup.timer
 if [ ! -f /etc/default/spoolmanscale ]; then
   install -m 0644 "$REPO/pi/systemd/spoolmanscale.default" /etc/default/spoolmanscale
 fi
 # The login prompt on the screen would sit under the UI.
 systemctl disable --now getty@tty1 2>/dev/null || true
 systemctl daemon-reload
-systemctl enable spoolmanscale filamentlager-ha-bridge
+systemctl enable spoolmanscale filamentlager-ha-bridge filamentlager-backup.timer
+systemctl start filamentlager-backup.timer
 systemctl restart filamentlager-ha-bridge
 systemctl restart spoolmanscale
 
 echo
 echo "Fertig. Status:  systemctl status spoolmanscale"
 echo "Log:             journalctl -u spoolmanscale -f"
+if [ ! -f /etc/filamentlager/backup.conf ]; then
+  echo "Backup auf die Synology einrichten:      sudo filamentlager-backup --setup"
+fi
 if [ ! -f /etc/filamentlager/ha.json ]; then
   echo "Home Assistant FilamentLager einrichten:  sudo filamentlager-ha-bridge --setup"
 fi

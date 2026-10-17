@@ -1,0 +1,10 @@
+[Unit]
+Description=FilamentLager backup, daily
+
+[Timer]
+OnCalendar=*-*-* 03:30
+RandomizedDelaySec=15min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

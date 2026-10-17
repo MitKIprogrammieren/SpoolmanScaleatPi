@@ -1,0 +1,85 @@
+#!/bin/bash
+# FilamentLager backup to a network share (Synology: Backup/raspberry).
+#
+#   sudo filamentlager-backup --setup    address, share, folder, user, password
+#   sudo filamentlager-backup            make a backup now (the timer does it daily)
+#   sudo filamentlager-backup --list     show the backups on the share
+#
+# Saved: the scale's settings, calibration, tags and logs (/var/lib/spoolmanscale),
+# the Home Assistant bridge (/etc/filamentlager) and /etc/default/spoolmanscale.
+# The newest KEEP backups are kept, older ones are deleted.
+set -euo pipefail
+
+CONF=/etc/filamentlager/backup.conf
+CRED=/etc/filamentlager/backup.cred
+MNT=/mnt/filamentlager-backup
+
+[ "$(id -u)" -eq 0 ] || { echo "Bitte mit sudo starten." >&2; exit 1; }
+
+setup() {
+  mkdir -p /etc/filamentlager
+  SERVER="" SHARE="Backup" FOLDER="raspberry" USERNAME="" KEEP=14
+  [ -f "$CONF" ] && . "$CONF"
+  echo "FilamentLager - Backup auf die Synology"
+  echo
+  read -rp "Adresse der Synology (IP oder Name) [${SERVER}]: " v; SERVER="${v:-$SERVER}"
+  read -rp "Freigegebener Ordner [${SHARE}]: " v; SHARE="${v:-$SHARE}"
+  read -rp "Unterordner darin [${FOLDER}]: " v; FOLDER="${v:-$FOLDER}"
+  read -rp "Benutzer auf der Synology [${USERNAME}]: " v; USERNAME="${v:-$USERNAME}"
+  read -rsp "Passwort (Enter = bisheriges behalten): " PASS; echo
+  read -rp "Wie viele Backups aufheben [${KEEP}]: " v; KEEP="${v:-$KEEP}"
+  cat > "$CONF" <<EOC
+SERVER="$SERVER"
+SHARE="$SHARE"
+FOLDER="$FOLDER"
+USERNAME="$USERNAME"
+KEEP=$KEEP
+EOC
+  if [ -n "$PASS" ] || [ ! -f "$CRED" ]; then
+    umask 077
+    printf 'username=%s\npassword=%s\n' "$USERNAME" "$PASS" > "$CRED"
+  else
+    sed -i "s/^username=.*/username=$USERNAME/" "$CRED"
+  fi
+  chmod 600 "$CRED"
+  echo
+  echo "Gespeichert. Erstes Backup:"
+  backup
+}
+
+mount_share() {
+  [ -f "$CONF" ] || { echo "Noch nicht eingerichtet: sudo filamentlager-backup --setup"; exit 0; }
+  . "$CONF"
+  mkdir -p "$MNT"
+  mountpoint -q "$MNT" && umount "$MNT" || true
+  if ! mount -t cifs "//$SERVER/$SHARE" "$MNT" -o "credentials=$CRED,vers=3.0,uid=0,gid=0,file_mode=0600,dir_mode=0700"; then
+    echo "Die Freigabe //$SERVER/$SHARE lässt sich nicht verbinden (Adresse, Benutzer, Passwort, SMB an der Synology?)." >&2
+    exit 1
+  fi
+  trap 'umount "$MNT" 2>/dev/null || true' EXIT
+  mkdir -p "$MNT/$FOLDER"
+}
+
+backup() {
+  mount_share
+  local name="filamentlager-$(hostname)-$(date +%Y-%m-%d_%H%M).tar.gz"
+  local items=()
+  for p in /var/lib/spoolmanscale /etc/filamentlager /etc/default/spoolmanscale; do
+    [ -e "$p" ] && items+=("$p")
+  done
+  # The bridge's credential files belong in it (a restore needs them), the
+  # backup's own share password does not.
+  tar --exclude="$CRED" -czf "$MNT/$FOLDER/$name" "${items[@]}" 2>/dev/null
+  echo "Backup: //$SERVER/$SHARE/$FOLDER/$name ($(du -h "$MNT/$FOLDER/$name" | cut -f1))"
+  # keep the newest KEEP
+  ls -1t "$MNT/$FOLDER"/filamentlager-"$(hostname)"-*.tar.gz 2>/dev/null | tail -n +$((KEEP + 1)) | while read -r old; do
+    rm -f "$old" && echo "entfernt: $(basename "$old")"
+  done
+}
+
+case "${1:-}" in
+  --setup) setup ;;
+  --list)  mount_share; ls -lh "$MNT/$FOLDER" ;;
+  "")      backup ;;
+  *) echo "Aufruf: filamentlager-backup [--setup|--list]" >&2; exit 2 ;;
+esac

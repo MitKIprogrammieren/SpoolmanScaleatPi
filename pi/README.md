@@ -223,6 +223,31 @@ wird.
 Prüfen: `filamentlager-ha-bridge --check`, Log:
 `journalctl -u filamentlager-ha-bridge -f`.
 
+## Backup auf die Synology
+
+Einmal einrichten:
+
+```bash
+sudo filamentlager-backup --setup
+```
+
+Gefragt werden Adresse der Synology, freigegebener Ordner (`Backup`),
+Unterordner (`raspberry`), Benutzer und Passwort. Danach legt der Pi jede
+Nacht um 3:30 Uhr ein Archiv `filamentlager-<name>-<datum>.tar.gz` dort ab und
+hebt die letzten 14 auf. Gesichert werden Einstellungen, Kalibrierung, Tags und
+Logs der Waage, die Home-Assistant-Brücke und `/etc/default/spoolmanscale`.
+
+Sofort sichern: `sudo filamentlager-backup`, Liste: `sudo filamentlager-backup --list`.
+An der Synology muss SMB eingeschaltet sein (Systemsteuerung → Dateidienste).
+
+Zurückspielen auf einem neu aufgesetzten Pi (nach `install.sh`):
+
+```bash
+sudo systemctl stop spoolmanscale filamentlager-ha-bridge
+sudo tar -xzf filamentlager-....tar.gz -C /
+sudo systemctl start filamentlager-ha-bridge spoolmanscale
+```
+
 ## Was anders ist als beim ESP
 
 | Funktion | Pi |
