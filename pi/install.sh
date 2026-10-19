@@ -33,6 +33,13 @@ if command -v raspi-config >/dev/null; then
   raspi-config nonint do_serial_cons 1  # keine Login-Konsole auf dem UART
   raspi-config nonint do_boot_behaviour B1 || true   # Konsole statt Desktop
 fi
+# Zweiter NFC-Leser: UART3 auf GPIO4 (Pin 7) / GPIO5 (Pin 29)
+CFG=/boot/firmware/config.txt
+[ -f "$CFG" ] || CFG=/boot/config.txt
+if [ -f "$CFG" ] && ! grep -q '^dtoverlay=uart3' "$CFG"; then
+  printf '\n[all]\n# FilamentLager: zweiter PN532\ndtoverlay=uart3\n' >> "$CFG"
+  echo "UART3 für den zweiten NFC-Leser eingeschaltet (wirkt nach dem Neustart)"
+fi
 
 echo "== Bauen (dauert beim ersten Mal einige Minuten)"
 cmake -S "$REPO/pi" -B "$BUILD" -DCMAKE_BUILD_TYPE=Release

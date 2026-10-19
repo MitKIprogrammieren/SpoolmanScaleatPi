@@ -8,12 +8,21 @@
 // SPOOLMANSCALE_PN532=/dev/ttyUSB0   another serial port (e.g. a USB adapter)
 // SPOOLMANSCALE_PN532=i2c            the shared I2C bus at 0x24, as on the ESP
 //
+// A second reader (a spool lies with its tag anywhere around the hub, two
+// readers see more of the circle) sits on UART3: GPIO4/TXD3 (pin 7) and
+// GPIO5/RXD3 (pin 29), enabled by dtoverlay=uart3 (install.sh sets it).
+// It is found on its own; SPOOLMANSCALE_PN532_2=/dev/ttyXXX names it,
+// SPOOLMANSCALE_PN532_2=off switches the search off. Both are polled in turn;
+// the one that sees a tag serves the reads that follow.
+//
 // The functions are those of src/hardware/nfc.h, with the same retry rules the
 // ESP version had around the Adafruit library.
 
 #include "hardware/nfc.h"
 
 #include <cerrno>
+#include <climits>
+#include <cstdlib>
 #include <fcntl.h>
 #include <poll.h>
 #include <string>
@@ -36,12 +45,25 @@ constexpr uint8_t ULTRALIGHT_WRITE = 0xA2;
 constexpr uint8_t MIFARE_SECTOR_READ_ATTEMPTS = 3;
 
 enum Transport { T_NONE, T_UART, T_I2C };
-Transport s_t = T_NONE;
-int s_fd = -1;
-std::string s_dev;
+
+struct Reader {
+  Transport t = T_NONE;
+  int fd = -1;
+  std::string dev;
+  bool ok = false;
+  bool need_wake = true;
+};
+Reader s_r[2];
+int s_cur = 0;            // the reader the next command goes to
 TwoWire* s_wire = nullptr;
 bool s_ok = false;
-bool s_need_wake = true;
+bool s_second_tried = false;
+
+// The code below was written for one reader; these name the current one.
+#define s_t (s_r[s_cur].t)
+#define s_fd (s_r[s_cur].fd)
+#define s_dev (s_r[s_cur].dev)
+#define s_need_wake (s_r[s_cur].need_wake)
 
 // ---- UART --------------------------------------------------------------------
 bool uartOpen() {
@@ -236,6 +258,21 @@ bool exchange(const std::vector<uint8_t>& data, std::vector<uint8_t>& out, int t
   return true;
 }
 
+// The second UART, if one exists that is not the first reader's port.
+std::string secondPort() {
+  const char* env = getenv("SPOOLMANSCALE_PN532_2");
+  if (env && *env) return strcmp(env, "off") == 0 ? std::string() : std::string(env);
+  char first[PATH_MAX] = "";
+  if (s_r[0].t == T_UART && !realpath(s_r[0].dev.c_str(), first)) first[0] = 0;
+  for (const char* c : {"/dev/ttyAMA3", "/dev/ttyAMA1", "/dev/ttyAMA2", "/dev/ttyAMA4"}) {
+    char real[PATH_MAX];
+    if (!realpath(c, real)) continue;
+    if (first[0] && strcmp(real, first) == 0) continue;
+    return c;
+  }
+  return std::string();
+}
+
 bool startTransport() {
   const char* env = getenv("SPOOLMANSCALE_PN532");
   std::string sel = env && *env ? env : "/dev/serial0";
@@ -281,29 +318,100 @@ bool readBlock16(uint8_t block, uint8_t data[16]) {
 }
 }  // namespace
 
-bool nfcHardwareBegin(TwoWire* wire, int8_t, int8_t, uint32_t* firmware_version) {
-  s_wire = wire;
-  if (!startTransport()) {
+// The second reader: looked for once, kept when it answers.
+static void startSecond() {
+  if (s_second_tried) return;
+  s_second_tried = true;
+  const std::string dev = secondPort();
+  if (dev.empty()) return;
+  const int keep = s_cur;
+  s_cur = 1;
+  s_dev = dev;
+  if (uartOpen()) {
+    s_t = T_UART;
+    s_need_wake = true;
+    uint32_t fw = 0;
+    s_r[1].ok = bringUp(&fw);
+    if (s_r[1].ok) {
+      fprintf(stderr, "PN532: second reader on %s, firmware %08x\n", dev.c_str(), (unsigned)fw);
+    } else {
+      fprintf(stderr, "PN532: nothing answers on %s, one reader\n", dev.c_str());
+      close(s_fd);
+      s_fd = -1;
+      s_t = T_NONE;
+    }
+  }
+  s_cur = keep;
+}
+
+static bool firstUp(uint32_t* firmware_version) {
+  s_cur = 0;
+  if (s_t == T_NONE && !startTransport()) {
     if (firmware_version) *firmware_version = 0;
     return false;
   }
-  s_ok = bringUp(firmware_version);
-  return s_ok;
-}
-
-bool nfcHardwarePing() { return s_t != T_NONE && firmwareVersion() != 0; }
-
-bool nfcHardwareReinit(uint32_t* firmware_version) {
-  if (s_t == T_NONE && !startTransport()) return false;
   if (s_t == T_UART) {
     tcflush(s_fd, TCIOFLUSH);
     s_need_wake = true;
   }
-  s_ok = bringUp(firmware_version);
+  s_r[0].ok = bringUp(firmware_version);
+  return s_r[0].ok;
+}
+
+bool nfcHardwareBegin(TwoWire* wire, int8_t, int8_t, uint32_t* firmware_version) {
+  s_wire = wire;
+  firstUp(firmware_version);
+  startSecond();
+  // With only the second one answering the scale still reads tags.
+  s_ok = s_r[0].ok || s_r[1].ok;
+  if (!s_r[0].ok && s_r[1].ok) {
+    s_cur = 1;
+    if (firmware_version) *firmware_version = firmwareVersion();
+  }
   return s_ok;
 }
 
+bool nfcHardwarePing() {
+  for (int i = 0; i < 2; i++) {
+    if (!s_r[i].ok && i == 1) continue;
+    const int keep = s_cur;
+    s_cur = i;
+    const bool alive = s_t != T_NONE && firmwareVersion() != 0;
+    s_cur = keep;
+    if (alive) return true;
+  }
+  return false;
+}
+
+bool nfcHardwareReinit(uint32_t* firmware_version) {
+  const bool first = firstUp(firmware_version);
+  if (s_r[1].t != T_NONE) {
+    s_cur = 1;
+    tcflush(s_fd, TCIOFLUSH);
+    s_need_wake = true;
+    s_r[1].ok = bringUp(nullptr);
+  }
+  s_cur = first ? 0 : (s_r[1].ok ? 1 : 0);
+  s_ok = first || s_r[1].ok;
+  return s_ok;
+}
+
+static bool listPassive(uint8_t* uid, uint8_t* uid_len, uint16_t timeout_ms);
+
+// Asks the reader that saw the last tag first, then the other one; the one that
+// finds a tag stays current, so the sector and page reads go to it.
 bool nfcReadPassiveTarget(uint8_t* uid, uint8_t* uid_len, uint16_t timeout_ms) {
+  const int first = s_cur;
+  if (s_r[first].t != T_NONE && listPassive(uid, uid_len, timeout_ms)) return true;
+  const int other = 1 - first;
+  if (s_r[other].t == T_NONE || !s_r[other].ok) return false;
+  s_cur = other;
+  if (listPassive(uid, uid_len, timeout_ms)) return true;
+  s_cur = first;
+  return false;
+}
+
+static bool listPassive(uint8_t* uid, uint8_t* uid_len, uint16_t timeout_ms) {
   std::vector<uint8_t> r;
   if (!command({CMD_IN_LIST_PASSIVE, 0x01, 0x00}, r, timeout_ms ? timeout_ms : 1000)) return false;
   // NbTg, Tg, SENS_RES(2), SEL_RES, NFCIDLength, NFCID...
@@ -318,7 +426,7 @@ bool nfcReadPassiveTarget(uint8_t* uid, uint8_t* uid_len, uint16_t timeout_ms) {
 static bool reselectMifareUid(const uint8_t expected_uid[4], uint16_t timeout_ms) {
   uint8_t uid[NFC_UID_MAX] = {0};
   uint8_t uid_len = 0;
-  return nfcReadPassiveTarget(uid, &uid_len, timeout_ms) && uid_len == 4 && memcmp(uid, expected_uid, 4) == 0;
+  return listPassive(uid, &uid_len, timeout_ms) && uid_len == 4 && memcmp(uid, expected_uid, 4) == 0;
 }
 
 static bool authenticateMifareTrailer(uint8_t trailer_block, uint8_t key[6], uint8_t uid[4], uint8_t key_type) {

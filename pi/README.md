@@ -52,6 +52,22 @@ Lesefehlern führt. Wer es trotzdem probieren will: PN532 an Pin 3/5 parallel
 zum NAU7802, DIP-Schalter auf I²C und `SPOOLMANSCALE_PN532=i2c` setzen
 (siehe Einstellungen).
 
+**Zweiter PN532 (optional)**
+
+Zwei Leser sehen mehr vom Umfang der Spule: Der Tag wird gefunden, egal wie
+die Spule liegt. Der zweite hängt an UART3, ebenfalls DIP-Schalter auf HSU.
+
+| PN532 Nr. 2 | Pi-Pin |
+|---|---|
+| VCC | Pin 4 (5V) |
+| GND | Pin 14 (GND) |
+| TXD | Pin 29 (GPIO5 / RXD3) |
+| RXD | Pin 7 (GPIO4 / TXD3) |
+
+`install.sh` schaltet UART3 ein (`dtoverlay=uart3`, wirkt nach einem
+Neustart), die Waage findet den zweiten Leser selbst. Im Log steht dann
+„PN532: second reader on …“. Beide werden abwechselnd abgefragt.
+
 **Display**
 
 Das TFT50 wird nur mit dem DSI-Flachbandkabel an den DSI-Anschluss des Pi
@@ -132,6 +148,7 @@ In `/etc/default/spoolmanscale` (danach `sudo systemctl restart spoolmanscale`):
 | `SPOOLMANSCALE_TOUCH=/dev/input/eventN` | bestimmtes Touch-Gerät |
 | `SPOOLMANSCALE_PN532=/dev/ttyUSB0` | PN532 an anderem Port (z. B. USB-Adapter) |
 | `SPOOLMANSCALE_PN532=i2c` | PN532 am I²C-Bus |
+| `SPOOLMANSCALE_PN532_2=/dev/ttyAMA3` | Port des zweiten PN532 (`off` = keiner) |
 | `SPOOLMANSCALE_FB=/dev/fb0` | anderer Framebuffer |
 | `SPOOLMANSCALE_I2C=/dev/i2c-1` | anderer I²C-Bus |
 | `SPOOLMANSCALE_BACKLIGHT=/sys/class/backlight/…` | Hintergrundbeleuchtung |
