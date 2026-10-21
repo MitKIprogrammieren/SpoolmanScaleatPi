@@ -100,6 +100,18 @@ void buildBluetoothScreen() {
       show_printer_pending = true;
     }, LV_EVENT_CLICKED, NULL);
   }
+#ifdef SPOOLMANSCALE_PI
+  // The Pi has no Bluetooth printing yet, but the label editor and the
+  // template live behind the printer row: reachable with Bluetooth off.
+  if (!bleEnabled()) {
+    char buf_p[40]; copyT(buf_p, sizeof(buf_p), STR_PRN_TITLE);
+    lv_obj_t *pbtn = makeListBtn(list, LV_SYMBOL_IMAGE, buf_p, "Etikett-Vorlage | Freies Etikett");
+    lv_obj_add_event_cb(pbtn, [](lv_event_t *e){
+      logSD("BTN: Bluetooth -> Printer");
+      show_printer_pending = true;
+    }, LV_EVENT_CLICKED, NULL);
+  }
+#endif
 }
 
 void handleBluetoothDeferredActions() {

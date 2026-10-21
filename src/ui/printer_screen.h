@@ -20,3 +20,11 @@ void handlePrinterDeferredActions();
 // What the last test print came back with, as a StringID, or -1 for none
 // since boot. The browser page shows it; the device shows a popup.
 int printerLastTestResult();
+
+// The spool on the scale as its label sees it, the date asked of the backend.
+// False when the backend knows no spool there.
+struct SpoolLabelData;
+bool printerSpoolLabelData(SpoolLabelData* out);
+// Renders and prints a label from the editor, under the print card.
+struct LabelDoc;
+void printerPrintDoc(const LabelDoc& doc);

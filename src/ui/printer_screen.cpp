@@ -19,6 +19,7 @@
 #include "services/label_printer.h"
 #include "services/label_render.h"
 #include "ui/info_popup.h"
+#include "ui/label_edit_screen.h"
 #include "ui/print_card.h"
 #include "ui/printer_offset_screen.h"
 #include "ui/theme.h"
@@ -118,6 +119,40 @@ static void labelDateFor(int spool_id, SpoolLabelData* d) {
   d->date_first_used = first[0] != '\0';
 }
 
+bool printerSpoolLabelData(SpoolLabelData* out) {
+  if (!out || !(sm_found && sm_id > 0)) return false;
+  // What the scan left in the globals, as the backend named it.
+  SpoolLabelData spool{};
+  spool.id = sm_id;
+  snprintf(spool.name, sizeof(spool.name), "%s", sm_filament_name);
+  snprintf(spool.vendor, sizeof(spool.vendor), "%s", sm_vendor_g);
+  // Like the More info card: the backend's material when it named one,
+  // else what the Bambu tag says.
+  snprintf(spool.material, sizeof(spool.material), "%s",
+           sm_material_global[0] ? sm_material_global : g_tag.material);
+  snprintf(spool.color, sizeof(spool.color), "%s", sm_color_global);
+  labelDateFor(sm_id, &spool);
+  *out = spool;
+  return true;
+}
+
+void printerPrintDoc(const LabelDoc& doc) {
+  printerOffsetFlush();
+  const LabelPrinterConfig c = labelPrinterLoadConfig();
+  LabelPrintResult result = LP_NO_PRINTER;
+  if (!labelPrinterConfigured(c)) result = LP_NO_PRINTER;
+  else if (!bleEnabled()) result = LP_BLE_OFF;
+  else {
+    printCardShow();
+    LabelRaster raster{};
+    if (!labelRenderDoc(c, doc, &raster)) result = LP_BAD_RASTER;
+    else result = labelPrinterPrint(c, raster, printCardTick);
+    labelRasterFree(&raster);
+  }
+  logSDf("Printer: edited label result=%d", (int)result);
+  printCardResult(result);
+}
+
 void buildPrinterScreen() {
   logSD("BUILD: PrinterScreen");
   releaseScreen(&scr_printer);
@@ -171,6 +206,21 @@ void buildPrinterScreen() {
     lv_obj_add_event_cb(btn, [](lv_event_t *e){
       logSD("BTN: Printer -> next media");
       printer_cycle_media_pending = true;
+    }, LV_EVENT_CLICKED, NULL); }
+
+  // The label's text: the template for every spool's label, and a label
+  // with any text and no spool.
+  { lv_obj_t *btn = makeListBtn(list, LV_SYMBOL_EDIT, "Etikett-Vorlage",
+                                "Welche Zeilen ein Spulen-Etikett hat");
+    lv_obj_add_event_cb(btn, [](lv_event_t *e){
+      logSD("BTN: Printer -> label template");
+      labelEditOpenTemplate();
+    }, LV_EVENT_CLICKED, NULL); }
+  { lv_obj_t *btn = makeListBtn(list, LV_SYMBOL_FILE, "Freies Etikett",
+                                "Eigener Text, ohne Spule");
+    lv_obj_add_event_cb(btn, [](lv_event_t *e){
+      logSD("BTN: Printer -> free label");
+      labelEditOpenFree();
     }, LV_EVENT_CLICKED, NULL); }
 
   // The test print: the first thing to try with a new printer.
@@ -234,6 +284,7 @@ static void rebuild() {
 
 void handlePrinterDeferredActions() {
   printCardLoop();
+  labelEditLoop();
   printerOffsetTick();
   if (show_printer_offset_pending) {
     show_printer_offset_pending = false;

@@ -34,6 +34,7 @@
 #include "tag_display.h"
 #include "ui/main_screen_helpers.h"
 #include "ui/tag_write_popup.h"
+#include "ui/label_edit_screen.h"
 #include "ui/theme.h"
 #include "ui_common.h"
 
@@ -795,7 +796,13 @@ void buildMoreInfoScreen() {
   // Print label, left of the X. Only when it can do anything: Bluetooth on,
   // a printer picked, a spool the backend knows. The print itself runs from
   // the loop; it starts the BLE stack and blocks for seconds.
+  // On the Pi always with a known spool: the label editor shows the label
+  // even before a printer is set up, and says why a print did not go.
+#ifdef SPOOLMANSCALE_PI
+  if (sm_found && sm_id > 0) {
+#else
   if (bleEnabled() && labelPrinterConfigured(labelPrinterLoadConfig()) && sm_found && sm_id > 0) {
+#endif
     lv_obj_t *btn_print = lv_btn_create(hdr);
     lv_obj_set_size(btn_print, 116, 34);
     lv_obj_set_pos(btn_print, 282, 9);
@@ -806,8 +813,8 @@ void buildMoreInfoScreen() {
     lv_obj_set_style_radius(btn_print, UI_RADIUS_BTN, 0);
     lv_obj_set_style_shadow_width(btn_print, 0, 0);
     lv_obj_add_event_cb(btn_print, [](lv_event_t *e) {
-      logSD("BTN: MoreInfo -> print label");
-      print_spool_label_pending = true;
+      logSD("BTN: MoreInfo -> label editor");
+      labelEditRequestSpool();
     }, LV_EVENT_CLICKED, NULL);
     lv_obj_t *lbl_print = lv_label_create(btn_print);
     lv_label_set_text(lbl_print, T(STR_PRN_LABEL_PRINT));

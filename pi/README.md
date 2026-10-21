@@ -274,7 +274,7 @@ sudo systemctl start filamentlager-ha-bridge spoolmanscale
 | Einrichtungs-Hotspot, Improv, WLAN-Roaming | entfällt, macht das OS |
 | Firmware-Update per GitHub/Browser | ausgeblendet, Update mit `git pull` |
 | Deep Sleep | entfällt, das Display wird stattdessen abgeschaltet |
-| Etikettendruck per Bluetooth | noch nicht umgesetzt |
+| Etikettendruck per Bluetooth | noch nicht umgesetzt; Etikett-Editor, Vorlage und freies Etikett sind schon da (Vorschau auf dem Display) |
 | SD-Karten-Log | liegt in `/var/lib/spoolmanscale/sd` |
 | mDNS | Hostname kommt vom Pi; der Webdienst wird per avahi angekündigt |
 
@@ -312,3 +312,14 @@ SPOOLMANSCALE_DATA=/tmp/ssdata ./build/spoolmanscale &
 echo "tap 400 428" > /tmp/touch     # Tippen bei x=400, y=428 (Display-Pixel)
 # /tmp/fb.raw ist ein 800x480-Bild im Format XRGB8888
 ```
+
+## Etiketten bearbeiten
+
+Unter **Einstellungen → Verbindung → Bluetooth → Drucker**:
+
+- **Etikett-Vorlage**: welche Zeilen ein Spulen-Etikett hat (Spulennummer, Farbe, Datum, letzte Zeile, QR-Code) und der Text der letzten Zeile. Die Vorschau zeigt eine Beispielspule.
+- **Freies Etikett**: eigener Text ohne Spule, etwa für Kisten oder Fächer.
+
+**Mehr Info → Etikett drucken** öffnet das Etikett der Spule auf der Waage. Jede Zeile lässt sich antippen und mit der Bildschirmtastatur (QWERTZ mit ä, ö, ü, ß) ändern; die Änderung gilt nur für diesen Druck. Im HA-Lager-Modus hat das Etikett keinen QR-Code von sich aus (die Brücke auf dem Pi ist keine Seite fürs Handy); einen Inhalt kann man im Editor eintippen.
+
+`pi/tools/m20pro_test.py` prüft, ob ein Phomemo M20Pro die Befehle der M-Serie versteht.

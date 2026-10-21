@@ -43,6 +43,34 @@ bool labelRenderTest(const LabelPrinterConfig& printer, LabelRaster* out);
 // or check that the frame sits evenly.
 bool labelRenderCalibration(const LabelPrinterConfig& printer, LabelRaster* out);
 
+// ---- editable labels ------------------------------------------------------
+// What a label says, line by line, as the scale's label editor shows it:
+// the maker on top, the material in the black band, the title, up to four
+// small lines and the QR code. A spool's label starts from its data and the
+// stored template; a free label starts empty.
+#define LABEL_EDIT_LINES 4
+#define LABEL_EDIT_LEN   (LABEL_LINE_LEN + 16)
+struct LabelDoc {
+  char top[LABEL_LINE_LEN];
+  char band[LABEL_LINE_LEN];
+  char title[LABEL_LINE_LEN];
+  char lines[LABEL_EDIT_LINES][LABEL_EDIT_LEN];
+  char qr[LABEL_QR_LEN];
+  bool show_qr;
+};
+
+// Which facts a spool's label carries and its last line, kept in NVS.
+struct LabelTemplate {
+  bool id, color, date, footer_on, qr;
+  char footer[LABEL_LINE_LEN];
+};
+LabelTemplate labelTemplateLoad();
+bool labelTemplateSave(const LabelTemplate& t);
+
+void labelDocFromSpool(const SpoolLabelData& spool, LabelDoc* doc);
+void labelDocBlank(LabelDoc* doc);
+bool labelRenderDoc(const LabelPrinterConfig& printer, const LabelDoc& doc, LabelRaster* out);
+
 // A spool's label, with a QR code carrying what the active backend's own
 // scanner reads.
 bool labelRenderSpool(const LabelPrinterConfig& printer, const SpoolLabelData& spool,

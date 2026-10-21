@@ -1,4 +1,5 @@
 #include "navigation.h"
+#include "label_edit_screen.h"
 #include "scale_menu.h"
 #include "app/app_state.h"
 #include "ui_common.h"
@@ -61,6 +62,7 @@ void hideAllOverlays() {
   lagerScreenClose();
   designScreenClose();
 #endif
+  labelEditClose();
   if (scr_settings)    lv_obj_add_flag(scr_settings,    LV_OBJ_FLAG_HIDDEN);
   if (scr_connection)  lv_obj_add_flag(scr_connection,  LV_OBJ_FLAG_HIDDEN);
   if (scr_scale_sub)   lv_obj_add_flag(scr_scale_sub,   LV_OBJ_FLAG_HIDDEN);

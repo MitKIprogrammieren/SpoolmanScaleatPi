@@ -361,6 +361,7 @@ bool isTouchDevice(int fd) {
 int s_pipe_fd = -1;
 std::string s_pipe_buf;
 int s_pipe_hold = 0;   // polls left with the finger down
+std::vector<std::pair<int, int>> s_pipe_path;   // a drag still to play, one point per poll
 
 void openPipe(const char* path) {
   mkfifo(path, 0666);
@@ -373,6 +374,14 @@ void openPipe(const char* path) {
 
 void pollPipe() {
   if (s_pipe_fd < 0) return;
+  if (!s_pipe_path.empty()) {
+    s_raw_x = s_pipe_path.front().first;
+    s_raw_y = s_pipe_path.front().second;
+    s_pipe_path.erase(s_pipe_path.begin());
+    s_down = true;
+    if (s_pipe_path.empty()) s_pipe_hold = 2;
+    return;
+  }
   if (s_pipe_hold > 0) {
     if (--s_pipe_hold == 0) s_down = false;
     return;
@@ -390,6 +399,12 @@ void pollPipe() {
     s_raw_y = y;
     s_down = true;
     s_pipe_hold = 3;
+  }
+  int x2, y2;
+  if (sscanf(line.c_str(), "drag %d %d %d %d", &x, &y, &x2, &y2) == 4) {
+    const int steps = 12;
+    for (int i = 0; i <= steps; i++)
+      s_pipe_path.push_back({x + (x2 - x) * i / steps, y + (y2 - y) * i / steps});
   }
 }
 

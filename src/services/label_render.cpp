@@ -11,6 +11,8 @@
 #include "hardware/sd_logger.h"
 #include "lang.h"
 #include "services/backend.h"
+#include "services/prefs_store.h"
+#include "product_name.h"
 #include "services/text_util.h"
 #include "src/extra/libs/qrcode/qrcodegen.h"
 
@@ -369,7 +371,7 @@ bool labelRenderTest(const LabelPrinterConfig& printer, LabelRaster* out) {
   // band, the printer, the stock and the build as the title, and next to the
   // code to Ko-fi one sentence about it (Nikolai, 25.09.2026).
   SpoolLabelData d{};
-  snprintf(d.vendor, sizeof(d.vendor), "SpoolmanScale");
+  snprintf(d.vendor, sizeof(d.vendor), "%s", FW_PRODUCT_NAME);
   copyT(d.material, sizeof(d.material), STR_LBL_TEST_BAND);
   // The build, as short as it can be said: "beta.79" of a pre-release, the
   // whole version of a release.
@@ -463,7 +465,7 @@ bool labelRenderCalibration(const LabelPrinterConfig& printer, LabelRaster* out)
     ly += big->line_height + LR_GAP_PX;
   }
   if (ly + small->line_height < bottom) {
-    drawLine(canvas, tx, ly, tw, small, black, LV_TEXT_ALIGN_CENTER, "SpoolmanScale");
+    drawLine(canvas, tx, ly, tw, small, black, LV_TEXT_ALIGN_CENTER, FW_PRODUCT_NAME);
     ly += small->line_height + LR_GAP_PX;
   }
   if (ly + small->line_height < bottom) {
@@ -495,6 +497,9 @@ void labelQrForSpool(int spool_id, char* out, size_t n) {
   // opens on a phone - "WEB+SPOOLMAN:S-239" left the iPhone with plain text
   // (Nikolai, 30.09.2026). The tag format stays for a scale with no address.
   const char* base = backendBaseUrl();
+  // A server on the scale itself (the Home Assistant bridge on the Pi) is no
+  // page a phone can open: no code, the label editor takes one by hand.
+  if (strstr(base, "://127.0.0.1") || strstr(base, "://localhost")) { out[0] = '\0'; return; }
   if (backendIsFilaMan())       snprintf(out, n, "%s/spools/%d", base, spool_id);
   else if (backendIsBamBuddy()) snprintf(out, n, "%s/inventory?spool=%d", base, spool_id);
   else if (base[0] && strcmp(base, "http://") != 0) snprintf(out, n, "%s/spool/show/%d", base, spool_id);
@@ -509,24 +514,80 @@ static bool isHex6(const char* s) {
   return true;
 }
 
-bool labelRenderSpool(const LabelPrinterConfig& printer, const SpoolLabelData& spool,
-                      LabelRaster* out) {
-  char qr[LABEL_QR_LEN];
-  labelQrForSpool(spool.id, qr, sizeof(qr));
+// ---- the template and editable labels ----------------------------------------
+// NVS keys, 15 characters at most.
+#define LT_KEY_ID     "lbl_id"
+#define LT_KEY_COLOR  "lbl_color"
+#define LT_KEY_DATE   "lbl_date"
+#define LT_KEY_FOOT   "lbl_foot_on"
+#define LT_KEY_QR     "lbl_qr"
+#define LT_KEY_FTEXT  "lbl_foot"
+
+LabelTemplate labelTemplateLoad() {
+  LabelTemplate t{};
+  t.id = prefsGetBool(LT_KEY_ID, true);
+  t.color = prefsGetBool(LT_KEY_COLOR, true);
+  t.date = prefsGetBool(LT_KEY_DATE, true);
+  t.footer_on = prefsGetBool(LT_KEY_FOOT, true);
+  t.qr = prefsGetBool(LT_KEY_QR, true);
+  snprintf(t.footer, sizeof(t.footer), "%s", prefsGetString(LT_KEY_FTEXT, FW_PRODUCT_NAME).c_str());
+  return t;
+}
+
+bool labelTemplateSave(const LabelTemplate& t) {
+  bool ok = prefsPutBool(LT_KEY_ID, t.id);
+  ok = prefsPutBool(LT_KEY_COLOR, t.color) && ok;
+  ok = prefsPutBool(LT_KEY_DATE, t.date) && ok;
+  ok = prefsPutBool(LT_KEY_FOOT, t.footer_on) && ok;
+  ok = prefsPutBool(LT_KEY_QR, t.qr) && ok;
+  ok = prefsPutString(LT_KEY_FTEXT, t.footer) && ok;
+  return ok;
+}
+
+void labelDocBlank(LabelDoc* doc) {
+  if (doc) *doc = LabelDoc{};
+}
+
+void labelDocFromSpool(const SpoolLabelData& spool, LabelDoc* doc) {
+  if (!doc) return;
+  *doc = LabelDoc{};
+  const LabelTemplate t = labelTemplateLoad();
+  snprintf(doc->top, sizeof(doc->top), "%s", spool.vendor);
+  snprintf(doc->band, sizeof(doc->band), "%s", spool.material);
+  snprintf(doc->title, sizeof(doc->title), "%s", spool.name);
   // What stays true for the spool's whole life: where it is kept, the colour
   // and when it came into use. The rest and the place change, and a label
   // that shows them is wrong a week later (Nikolai, 25.09.2026).
-  char facts[LR_MAX_FACTS][LABEL_LINE_LEN + 16];
-  const char* lines[LR_MAX_FACTS];
   int n = 0;
-  snprintf(facts[n++], sizeof(facts[0]), "%s  #%d", backendName(), spool.id);
-  if (spool.color[0])
-    snprintf(facts[n++], sizeof(facts[0]), isHex6(spool.color) ? "%s  #%s" : "%s  %s",
+  if (t.id && spool.id > 0)
+    snprintf(doc->lines[n++], LABEL_EDIT_LEN, "%s  #%d", backendName(), spool.id);
+  if (t.color && spool.color[0])
+    snprintf(doc->lines[n++], LABEL_EDIT_LEN, isHex6(spool.color) ? "%s  #%s" : "%s  %s",
              T(STR_LBL_L_COLOR), spool.color);
-  if (spool.date[0])
-    snprintf(facts[n++], sizeof(facts[0]), "%s  %s",
+  if (t.date && spool.date[0])
+    snprintf(doc->lines[n++], LABEL_EDIT_LEN, "%s  %s",
              T(spool.date_first_used ? STR_LBL_L_FIRST : STR_LBL_L_ADDED), spool.date);
-  snprintf(facts[n++], sizeof(facts[0]), "SpoolmanScale");
-  for (int i = 0; i < n; i++) lines[i] = facts[i];
-  return renderLabel(printer, spool, lines, n, false, qr, "spool", out);
+  if (t.footer_on && t.footer[0])
+    snprintf(doc->lines[n++], LABEL_EDIT_LEN, "%s", t.footer);
+  if (spool.id > 0) labelQrForSpool(spool.id, doc->qr, sizeof(doc->qr));
+  doc->show_qr = t.qr && doc->qr[0];
+}
+
+bool labelRenderDoc(const LabelPrinterConfig& printer, const LabelDoc& doc, LabelRaster* out) {
+  SpoolLabelData d{};
+  snprintf(d.vendor, sizeof(d.vendor), "%s", doc.top);
+  snprintf(d.material, sizeof(d.material), "%s", doc.band);
+  snprintf(d.name, sizeof(d.name), "%s", doc.title);
+  const char* lines[LABEL_EDIT_LINES];
+  int n = 0;
+  for (int i = 0; i < LABEL_EDIT_LINES; i++)
+    if (doc.lines[i][0]) lines[n++] = doc.lines[i];
+  return renderLabel(printer, d, lines, n, false, doc.show_qr ? doc.qr : "", "label", out);
+}
+
+bool labelRenderSpool(const LabelPrinterConfig& printer, const SpoolLabelData& spool,
+                      LabelRaster* out) {
+  LabelDoc doc;
+  labelDocFromSpool(spool, &doc);
+  return labelRenderDoc(printer, doc, out);
 }
